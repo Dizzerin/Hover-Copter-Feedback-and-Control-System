@@ -72,8 +72,8 @@ j_system = 1/3*m_rod_to_pivot*l_rod_to_pivot^2 + 1/3*m_rod_extra*l_rod_extra^2 +
 A = [0 1; 0 -b];
 B = [0; l_rod_to_pivot/j_system];
 % for C matrix: num rows = num outputs (and number of measurements being taken simultaneously) and num columns = num states
-C = eye(2);         % 2x2 identity matrix -- assumes all states are being measured and reported as output y
-%C = [1 0; 0 0];    % just theta is being measured and reported as an ouput y
+%C = eye(2);  % 2x2 identity matrix -- assumes all states are being measured and reported as output y
+C = [1 0];   % just theta is being measured and reported as an ouput y
 D = [0];
 uncontrolled_sys = ss(A,B,C,D);
 % Simulate results for uncontrolled system
@@ -100,8 +100,8 @@ eig(A-B*G)
 % Create Controlled System (system with feedback and control -- observer not included in this state space model)
 % Reminder: X for this system is [theta, omega]
 A_con = A-B*G;
-B_con = [0; 0];     % No more small signal input for the controlled system, the input is now -B*G
-C_con = [1 0; 0 0]; % -- QUESTION - Does this do what I want?-->  Saying we can only measure theta, theta is the only output, all the theta dot (omega) outputs will be 0 in Y
+B_con = [0; 0];   % No more small signal input for the controlled system, the input is now -G*X
+C_con = [1 0];    % Measure only theta, theta is the only output, all the theta dot (omega) outputs will be 0 in Y
 D_con = 0;
 controlled_sys = ss(A_con,B_con,C_con,D_con);
 % Simulate results for controlled system
@@ -125,33 +125,40 @@ initial_omega = 0.2;      % initial theta dot or omega or angular velocity (all 
 % Note the use of A and C transpose, they are transposed because the system has K*C instead of C*K
 % See written documentation for more info on that.
 
-% Using manual pole placement:
-obs_poles = [-10, -11];
-disp("Manual observer poles:")
-K = place(A',C',obs_poles)
-
 % Using LQR pole placement:
-Q = [10 0; 0 10];         % Is this synonymous with Vd?
-R = [0.01 0; 0 0.01];     % Is this synonymous with Vn?
-disp("LQR observer poles:")
+Q = [10 0; 0 10];     % Minimize equation X'*Q*X - therefore Q could be thought of as Vd (input disturbances) in this context -- bigger Q means X stays smaller make this big so mistakes in this variable don't matter too much
+##R = [0.1 0; 0 0.1];   % R is 2x2 if measuring both states in X  -- minimize equation Y'*R*Y -- Therefore R could be thought of as Vn (output noise) in this context
+R = 0.1;              % R is 1x1 if measuring only one state in X
+disp("K gain matrix with LQR placed kalman observer poles:")
 K = (lqr(A',C',Q,R))'
 
 % Using Kalman Filter pole placement:
 Q = [10 0; 0 10];
-R = [0.01 0; 0 0.01];
-sys = ss(A,[B B],C,D);  % Plant dynamics --- QUESTION -- B has to be a 2x2 for kalman function??? is that right? if so why?
-[kalman_filter_sys,K,Xf] = kalman(sys,Q,R);
-disp("Kalman observer poles:")
+##R = [0.1 0; 0 0.1];   % R is 2x2 if measuring both states in X
+R = 0.1;              % R is 1x1 if measuring only one state in X
+B_u = [0; 0];   % Matrix defining how much the u input affects each state in x
+B_w = [0; 0];   % Matrix defining how much w noise input affects each state in x
+Ts = -1;      % Mark it as discrete with no specific sample time
+sys = ss(A,[B_u B_w],C,D,Ts,'InputName',{'u' 'w'},'OutputName','y');  % Plant dynamics and additive input noise w - B has to be a 2x2 for kalman function because there are two inputs, U and noise inputs
+[kalman_filter_sys,K,Xf] = kalman(sys,Q,R);   % Creates a full system
+disp("K gain matrix with kalman function placed kalman observer poles:")
 K
 
 % Using LQE pole placement to build Kalman Filter:
 % Augment system with disturbances and noise
-Vd = .1*eye(2);   % disturbance covariance
-Vn = 1*eye(2);    % noise covariance
+Vd = [0.1 0; 0 0.1];  % disturbance covariance
+##Vn = [1 0; 0 1];    % noise covariance -- 2x2 if measuring both states in X
+Vn = 1;               % noise covariance -- 1x1 if measuring only 1 state in X
 [K,P,E] = lqe(A,Vd,C,Vd,Vn);  % design Kalman filter observer/estimator
-disp("LQE kalman observer poles:")
+disp("K gain matrix with LQE placed kalman observer poles:")
 K
 kalman_filter_observer_eigs = E
+
+% Using manual pole placement:
+obs_poles = [-10, -11];
+disp("K gain matrix with manually placed kalman observer poles:")
+K = (place(A',C',obs_poles))'
+
 
 % Verify poles/eigenvalues are where we want them with the controller implemented -- negative poles are stable since they are in the left hand plane
 disp('The poles of the observer are determined by A-K*C and are:')
@@ -162,15 +169,15 @@ eig(A-K*C)
 % Reminder: X for this system is [theta_hat, omega_hat]
 A_obs = A-K*C;
 B_obs = [B K];    % Observer has both u and Y as inputs
-C_obs = eye(2);   % -- QUESTION - what does this mean?  All states observable?
+C_obs = eye(2);   % Output should include both estimates for both states in X
 D_obs = 0*[B K];
 observer_sys = ss(A_obs, B_obs, C_obs, D_obs);
 
 % Simulate results for observer system
 % Give both u and Y as inputs to observer
 t=0:0.05:10;              % times to simulate, start:step:stop
-observer_input = [U;Y'];  % input to observer if system is uncontrolled is U and Y' -- QUESTION why is it not first row all columns of Y'?
-observer_input_controlled = [-G*Y';Y'];  % input to observer is controlled is U=-G*Y' and Y'
+observer_input = [U;Y'];  % input to observer if system is uncontrolled is U and Y'
+observer_input_controlled = [-G*X';Y'];  % input to observer if controlled is U=-G*X' and Y'
 initial_theta_hat = pi/3; % initial theta state for observer
 initial_omega_hat = 0.2;  % initial omega state for observer
 initial_conditions = [initial_theta_hat initial_omega_hat];
@@ -189,7 +196,7 @@ initial_conditions = [initial_theta_hat initial_omega_hat];
 % so X for this combined system would be [theta, omega, theta_hat, omega_hat]
 A_combined = [A zeros(2); K*C A-K*C];  % 4x4
 B_combined = [B; B];   % 4x1
-C_combined = eye(4);   % 4x4  -- QUESTION - what does this mean?  All states observable?
+C_combined = eye(4);   % 4x4 -- All states observable
 D_combined = D;
 combined_system = ss(A_combined, B_combined, C_combined, D_combined);
 
@@ -197,7 +204,7 @@ combined_system = ss(A_combined, B_combined, C_combined, D_combined);
 % Give both u and Y as inputs to observer
 t=0:0.05:10;              % times to simulate, start:step:stop
 combined_input = [U];     % input to combined system if system is uncontrolled is U
-combined_input_controlled = [-G*Y'];  % QUESTION --> input to combined system is controlled is U=-G*Y'
+combined_input_controlled = [-G*X'];  % input to combined system if controlled is U=-G*X'
 initial_theta = pi/3;     % initial theta for feedback system/actual system
 initial_omega = 0.2;      % initial omega for feedback system/actual system
 initial_theta_hat = pi/3; % initial theta state for observer

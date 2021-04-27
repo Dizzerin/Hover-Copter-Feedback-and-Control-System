@@ -1,0 +1,25 @@
+### Datatypes (bold, orange)
+
+CommManager KEYWORD1
+
+### Methods (orange)
+
+addToggle   KEYWORD2
+addButton   KEYWORD2
+addSlider   KEYWORD2
+#addJoystick   KEYWORD2
+
+addPlot  KEYWORD2
+addNumber   KEYWORD2
+
+headroom KEYWORD2
+
+### Pre-compilation options (green)
+
+S302_SERIAL KEYWORD3    PREPROCESSOR
+S302_WEBSOCKETS KEYWORD3    PREPROCESSOR
+S302_VERBOSE KEYWORD3    PREPROCESSOR
+
+### Constants (blue)
+
+S302_PORT   LITERAL1

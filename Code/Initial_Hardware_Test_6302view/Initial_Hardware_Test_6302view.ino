@@ -1,5 +1,5 @@
-#include <Six302.h>
-#include <Encoder.h>
+#include <Six302.h>           // https://github.com/almonds0166/6302view
+#include <Encoder.h>          // Ai Esp32 Rotary Encoder by Igor Antolic
 
 // Pin Definitions
 const int motorPin = 5;       // Motor output pin -- GPIO pin 5 -- pin 29
@@ -17,7 +17,7 @@ const int PWMFreq = 10000;      // 10KHz
 const int PWMChannel = 0;   
 const int PWMResolution = 12;   // 12-bits
 const int MAX_DUTY_CYCLE = (int)(pow(2, PWMResolution) -1);
-long encoderPos = 0;            // Encoder position
+long encoderPos = -999;         // Encoder position
 float reportedEncoderPos = 0.0; // Reported encoder position (6302view will only accept a float)
 const float Resistor = 0.5;     // Resistor value in ohms (R3 on schematic, resistor used for measuing current to motor)
 int ADCValueHigh = 0;           // ADC input value from high voltage side of R3

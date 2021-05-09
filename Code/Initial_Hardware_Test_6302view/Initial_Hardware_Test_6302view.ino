@@ -23,8 +23,8 @@ const int potPinA = 25;       // Motor output pin -- GPIO pin 25 -- pin 9
 const int potPinB = 26;       // Motor output pin -- GPIO pin 26 -- pin 10
 const int ADCPinHigh = 33;     // ADC input pin used for high voltage side of current measuring diode -- GPIO pin 33 -- pin 8
 const int ADCPinLow = 32;      // ADC input pin used for low voltage side of current measuring diode -- GPIO pin 32 -- pin 7
-const int encoderPinA = 17;   // Shaft angle encoder input pin A  -- GPIO pin 17 -- pin 17  (used to be GPIO pin 0 -- pin 33)
-const int encoderPinB = 16;   // Shaft angle encoder input pin B  -- GPIO pin 16 -- pin 16  (used to be GPIO pin 2 -- pin 34)
+const int encoderPinA = 17;   // Shaft angle encoder input pin A -- GPIO pin 17 -- pin 17 (used to be GPIO pin 0 -- pin 33)
+const int encoderPinB = 16;   // Shaft angle encoder input pin B -- GPIO pin 16 -- pin 16 (used to be GPIO pin 2 -- pin 34)
 
 // Initialize Vars
 //uint16_t PWMDutyCycle = 0;

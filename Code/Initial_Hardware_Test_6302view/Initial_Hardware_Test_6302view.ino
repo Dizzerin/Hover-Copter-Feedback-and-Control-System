@@ -29,20 +29,21 @@ const int encoderPinB = 16;   // Shaft angle encoder input pin B -- GPIO pin 16 
 // Initialize Vars
 //uint16_t PWMDutyCycle = 0;
 float PWMDutyCycle = 0.0;       // Must be a float for 6302view to be able to control it
-const int PWMFreq = 10000;      // 10KHz
-const int PWMChannel = 0;   
-const int PWMResolution = 12;   // 12-bits
-const int MAX_DUTY_CYCLE = (int)(pow(2, PWMResolution) -1);
-long encoderPos = -999;         // Encoder position
+const int PWMFreq = 78000;      // 78KHz -- maximal frequency is 80000000 / 2^bit_num
+const int PWMChannel = 0;       // PWM channel
+const int PWMResolution = 10;   // 10-bits
+const int MAX_DUTY_CYCLE = (int)(pow(2, PWMResolution)-1);
+long encoderPos = 0;            // Initial encoder position
 float reportedEncoderPos = 0.0; // Reported encoder position (6302view will only accept a float)
 const float resistor = 0.5;     // Resistor value in ohms (R3 on schematic, resistor used for measuing current to motor)
 int ADCValueHigh = 0;           // ADC input value from high voltage side of R3
 int ADCValueLow = 0;            // ADC input value from low voltage side of R3
-int numAvgSamples = 80;         // Number of values to use for the running averages
+int numAvgSamples = 10;         // Number of values to use for the running averages
 RunningAverage voltageHigh(numAvgSamples); // High voltage side of R3
 RunningAverage voltageLow(numAvgSamples);  // Low voltage side of R3
 float voltageHighFloat = 0.0;   // High voltage side of R3
 float voltageLowFloat = 0.0;    // Low voltage side of R3
+float voltageDrop = 0.0;        // Voltage drop across R3
 float motorCurrent = 0.0;       // Current being delivered to the motor
 
 // Initilization for encoder reading
@@ -56,13 +57,16 @@ CommManager comManager(STEP_TIME, REPORT_TIME);
 
 void setup() {
    // Add modules (general format: pointer to var, title, other options)
-   comManager.addSlider(&PWMDutyCycle, "PWM Duty Cycle", 0, MAX_DUTY_CYCLE, 5);
+   comManager.addSlider(&PWMDutyCycle, "PWM Duty Cycle", 0, MAX_DUTY_CYCLE, 1);
    comManager.addPlot(&reportedEncoderPos, "Encoder Output", -4095, 4095);             // Not sure about actual range yet
    comManager.addPlot(&motorCurrent, "Motor Current (Amps)", 0, 2.5);
+   comManager.addPlot(&voltageDrop, "Motor Voltage (V)", 0, 5);
 
    // Other modules that may not stay
    comManager.addPlot(&voltageHighFloat, "High side Voltage (V)", 0, 3.5);
    comManager.addPlot(&voltageLowFloat, "Low side Voltage (V)", 0, 3.5);
+   comManager.addNumber(&voltageDrop, "Motor Voltage (V)");
+   comManager.addNumber(&motorCurrent, "Motor Current (Amps)");
    
    // Connect to 6302view via serial communication
    comManager.connect(&Serial, 115200);
@@ -90,6 +94,7 @@ float get_motor_current(){
   // For 6302view - get the floats and work with those, also avoid repeated function calls
   voltageHighFloat = voltageHigh.getAverage();
   voltageLowFloat = voltageLow.getAverage();
+  voltageDrop = voltageHighFloat - voltageLowFloat;
 
 
   // Calculate and return motor current
@@ -99,7 +104,7 @@ float get_motor_current(){
 void loop() {
 
   // Update vars
-  encoderPos = myEncoder.read();
+  encoderPos = -1 * myEncoder.read();       // Note I made this negative becuase of the way our hover copter arm is setup.  Counter clockwise is positive the way we gnerally think of it
   reportedEncoderPos = float(encoderPos);
   motorCurrent = get_motor_current();
   

@@ -77,7 +77,7 @@ float voltageDrop = 0.0;                    // Voltage drop across R3
 float motorCurrent = 0.0;                   // Current being delivered to the motor
 
 // Other Initialization
-int deltaT = STEP_TIME/1000;    // Time span between samples in seconds -- used for calculating estimated time derivatives -- currently estimated as explicit sleep time, but could implement timer later
+int deltaT = STEP_TIME/10^6;    // Time span between samples in seconds -- used for calculating estimated time derivatives -- 6302's communication manager handles this and ensures this delay between loops/steps
 bool controlOn = false;         // Toggle for enabling feedback control algorithms
 bool setZeroPoint = false;      // Button to set the current hover arm position as the 0 point (theta=0 should correspond to horizontal)
 

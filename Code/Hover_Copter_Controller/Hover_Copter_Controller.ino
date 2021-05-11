@@ -96,8 +96,8 @@ void setup() {
    comManager.addNumber(&currentThetaDegree, "Theta (deg)");                      // Current hover arm angle in degrees
    comManager.addNumber(&thetaDot, "Theta Dot (rad/s)");                          // Derivative of hover arm position in radians per second   
    // Plots
-   comManager.addPlot(&currentThetaDegree, "Theta (deg)", -360, 360);             // Current hover arm angle in degrees
-   comManager.addPlot(&thetaDot, "Theta Dot (rad/s)", -4*PI, 4*PI);               // Derivative of hover arm position in radians per second
+   comManager.addPlot(&currentThetaDegree, "Theta (deg)", -100, 100);             // Current hover arm angle in degrees
+   comManager.addPlot(&thetaDot, "Theta Dot (rad/s)", -0.015, 0.015);               // Derivative of hover arm position in radians per second
 //   comManager.addPlot(&motorCurrent, "Motor Current (Amps)", 0, 2.5);             // Max of about 2 amps
 //   comManager.addPlot(&voltageDrop, "R3 Voltage Drop (V)", 0, 1.1);               // Max of about 1 volt
 //   comManager.addPlot(&voltageHighFloat, "High side Voltage (V)", 0, 3.5);        // Max of about 3.3 volts
@@ -160,7 +160,7 @@ void loop() {
   PWMDutyCycle = PWMDutyCycleLarge + PWMDutyCycleSmall;
 
   // If limits are exceeded, cut motor power
-  if (currentTheta > PI || currentTheta < -PI){
+  if (currentTheta > PI/2 || currentTheta < -PI/2){
     PWMDutyCycle = 0;
   }
     

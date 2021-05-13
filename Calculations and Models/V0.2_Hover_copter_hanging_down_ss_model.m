@@ -1,7 +1,7 @@
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Info
 % Author: Caleb Nelson
-% Revision: 0.1
+% Revision: 0.2
 % Revision Info: Initial System Model (Hanging down pendulum tests)
 % Last Edit: 5/11/2021
 % 
@@ -9,7 +9,17 @@
 %   This script is used to model and control a hover arm
 %   for the feedback and control systems course offered 
 %   at Walla Walla University
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%   
+%   This v0.2 of the script was used to simply model the system hanging
+%   down and swinging unforced like a pendulum.  We conducted some 
+%   experimental tests dropping the pendulum from 90 degrees and allowing
+%   it to swing freely until it came to rest.  We then used this state
+%   space model to verify the accuracy of our model and to determine
+%   the damping coefficient by changing it until our simulations results
+%   from this model matched our experimental results.  We obtained almost
+%   a perfect match with the damping coefficient b=0.4 and the moment of
+%   intertia as is calculated below.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 clear all;
 close all;
@@ -41,7 +51,7 @@ l_rod_to_pivot = 0.395;   % length of hover arm rod from copter to pivot point
 r_copter = 0.01;          % radius of copter when estimated as an sphere for inertia calculations
 b = 0.4;                  % damping coefficient (guessed/estimated by trial and error)
 
-% Basic Calculated Parameters
+% Constants and Basic Calculated Parameters
 g = 9.80665;                              % gravitational constant in m/s^2
 d_rod = m_rod_t/l_rod_t;                  % linear density of rod -- kg/m
 l_rod_extra = l_rod_t - l_rod_to_pivot;   % length of rod that will stick out on the back side of the pivot point
@@ -52,10 +62,8 @@ j_system = 1/3*m_rod_to_pivot*l_rod_to_pivot^2 + 1/3*m_rod_extra*l_rod_extra^2 +
 
 % State Space Model (for hanging down tests)
 %   Note this negelects the extra rod (the only place it is taken into account is the intertia)
-A = [[0,1];
-     [-(g*l_rod_to_pivot*(m_copter+m_rod_to_pivot/2))/j_system,-b]];
-B = [[0];
-     [l_rod_to_pivot/j_system]];
+A = [[0,1];[-(g*l_rod_to_pivot*(m_copter+m_rod_to_pivot/2))/j_system,-b]];
+B = [[0];[l_rod_to_pivot/j_system]];
 %C = [1,0];
 C = eye(2);                               % 2x2 identity matrix -- assumes all states are availble/observable as outputs
 D = [0];
@@ -65,14 +73,15 @@ pendulum_ss = ss(A,B,C,D);
 
 % Simulate results
 t=0:0.05:25;            % times to simulate, start:step:stop
-forcing_function = zeros(size(t));
+forcing_function = zeros(size(t));   % input, discrete values for each time
+%forcing_function = -gx;  % State feedback (though you probably can't do this since it's dependant on x)
 initial_angle = pi;     % initial angle
 initial_omega = 0;      % initial theta dot or omega or angular velocity (all equivalent)
 lsim(pendulum_ss,forcing_function,t,[initial_angle;initial_omega]);
 
 % Check eigenvectors and eigenvalues
 disp('Eigenvectors and eigenvalues of A:')
-[eigenvectors, eigenvalues] = eig(pendulum_ss.a) % should be all negative for hanging down.
+[eigenvectors, eigenvalues] = eig(pendulum_ss.a) % should be all negative (stable) for hanging down.
 
 % Check observability
 observability_matrix = obsv(A,C);

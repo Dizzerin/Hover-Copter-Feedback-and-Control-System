@@ -19,7 +19,6 @@
 %   they are set by manually placing them, and then later they are overwritten 
 %   and set using LQR.  I have both methods here just to show how they are each done
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 clear all;
 close all;
 pkg load control
@@ -45,7 +44,7 @@ l_rod_to_pivot = 0.395;   % length of hover arm rod from copter to pivot point
 
 % Estimated parameters
 r_copter = 0.01;          % radius of copter when estimated as an sphere for inertia calculations
-b = 0.4;                  % damping coefficient (guessed/estimated by trial and error)
+b = 0.41;                 % damping coefficient (guessed/estimated by trial and error)
 
 % Constants and Basic Calculated Parameters
 g = 9.80665;                              % gravitational constant in m/s^2
@@ -89,18 +88,9 @@ rank_of_controlability_matrix = rank(controlabilty_matrix)
 % Get singular value decomposition to see how controlable it is in each direction
 [U,S,V] = svd(controlabilty_matrix,'econ');
 
-% Desired pole locations -- Manually place poles -- Find controller gain matrix K so that poles are where we want them
-##desired_eigs = [-0.1;-0.2];
-##desired_eigs = [-1.0;-1.1];
-desired_eigs = [-2.0;-2.1];
-##desired_eigs = [-3.0;-3.1];
-##desired_eigs = [-4.0;-4.1];
-
-disp('Your propotinal feedback gain controller K is:')
-K = place(A,B,desired_eigs)
-
+% Find controller gain matrix K so that poles are in the left hand plane
 % Use LQR to determine and choose poles
-Q = [100,0;0,10];
+Q = [5,0;0,1];
 R = 1;
 K = lqr(A,B,Q,R)
 % Verify poles/eigenvalues are where we want them with the controller implemented -- negative poles are stable since they are in the left hand plane
@@ -116,11 +106,15 @@ controlled_sys = ss(Ac,Bc,Cc,Dc);
 % Simulate results
 t=0:0.05:10;              % times to simulate, start:step:stop
 forcing_function = zeros(size(t));   % input, discrete values for each time
-initial_angle = pi/4;     % initial angle
+initial_angle = pi/3;     % initial angle
 initial_omega = 0.2;      % initial theta dot or omega or angular velocity (all equivalent)
 figure();
 lsim(controlled_sys,forcing_function,t,[initial_angle;initial_omega]);
 [Y,T,X] = lsim(controlled_sys,forcing_function,t,[initial_angle;initial_omega]);  % doesn't plot when output arguments are desired
+
+% Check eigenvectors and eigenvalues
+disp('The eigenvectors and eigenvalues of A for the controlled system are:')
+[eigenvectors, eigenvalues] = eig(controlled_sys.a)
 
 % Plot duty cycle -- make sure this small signal part isn't too big -- shows what small signal duty cycle is being added
 figure();

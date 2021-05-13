@@ -40,8 +40,14 @@ const float resistor = 0.5;     // Resistor value in ohms (R3 on schematic, resi
 //const float drag = 0;
 
 // State Feeback Controller Parameters - obtained using Matlab or Octave
-const float k1 = 3.8093;
-const float k2 = 0.5944;
+// const float k1 = 3.8093;    // Konrads manual placed poles
+// const float k2 = 0.5944;    // Konrads manual placed poles
+const float k1 = 0.39259;   // Our manual placed poles
+const float k2 = 0.065299;  // Our manual placed poles
+// const float k1 = 0.3162;    // Our first LQR placed poles
+// const float k2 = 0.1205;    // Our first LQR placed poles
+// const float k1 = 2.2361;    // Our second LQR placed poles
+// const float k2 = 1.0153;    // Our second LQR placed poles
 
 // 6302view Initialization
 #define STEP_TIME 5000              // Time between loops/steps in microseconds

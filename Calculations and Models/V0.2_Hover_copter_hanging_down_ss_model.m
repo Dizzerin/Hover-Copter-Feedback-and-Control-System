@@ -3,7 +3,7 @@
 % Author: Caleb Nelson
 % Revision: 0.2
 % Revision Info: Initial System Model (Hanging down pendulum tests)
-% Last Edit: 5/11/2021
+% Last Edit: 5/13/2021
 % 
 % Description
 %   This script is used to model and control a hover arm
@@ -20,7 +20,6 @@
 %   a perfect match with the damping coefficient b=0.4 and the moment of
 %   intertia as is calculated below.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 clear all;
 close all;
 pkg load control
@@ -49,7 +48,7 @@ l_rod_to_pivot = 0.395;   % length of hover arm rod from copter to pivot point
 
 % Estimated parameters
 r_copter = 0.01;          % radius of copter when estimated as an sphere for inertia calculations
-b = 0.4;                  % damping coefficient (guessed/estimated by trial and error)
+b = 0.41;                 % damping coefficient (guessed/estimated by trial and error)
 
 % Constants and Basic Calculated Parameters
 g = 9.80665;                              % gravitational constant in m/s^2
@@ -74,9 +73,9 @@ pendulum_ss = ss(A,B,C,D);
 % Simulate results
 t=0:0.05:25;            % times to simulate, start:step:stop
 forcing_function = zeros(size(t));   % input, discrete values for each time
-%forcing_function = -gx;  % State feedback (though you probably can't do this since it's dependant on x)
-initial_angle = pi;     % initial angle
+initial_angle = pi/2;   % initial angle
 initial_omega = 0;      % initial theta dot or omega or angular velocity (all equivalent)
+figure('Name','Angular position vs Time, Natural system response');
 lsim(pendulum_ss,forcing_function,t,[initial_angle;initial_omega]);
 
 % Check eigenvectors and eigenvalues

@@ -4,7 +4,7 @@
 % Revision: 0.3
 % Revision Info: Actual system model (horizontal instead of hanging down)
 %                with state feedback - manual pole placement
-% Last Edit: 5/11/2021
+% Last Edit: 5/13/2021
 % 
 % Description
 %   This script is used to model and control a hover arm
@@ -18,7 +18,6 @@
 %   The controller feeback gain parameters are set by manually placing them
 %   to some arbitry but reasonable values in the left hand plane
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 clear all;
 close all;
 pkg load control
@@ -95,7 +94,9 @@ rank_of_controlability_matrix = rank(controlabilty_matrix)
 ##desired_eigs = [-4.0;-4.1];
 ##desired_eigs = [-5.0;-5.1];
 ##desired_eigs = [-6.0;-6.1];
-##desired_eigs = [-7.0;-7.1];     % Too aggressive
+##desired_eigs = [-7.0;-7.1];     % Too aggressive?
+desired_eigs = [-10;-11];
+%desired_eigs = [-12;-13];
 
 disp('Your propotinal feedback gain controller K is:')
 K = place(A,B,desired_eigs)

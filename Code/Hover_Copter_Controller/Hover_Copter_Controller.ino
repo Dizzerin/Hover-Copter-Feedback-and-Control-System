@@ -161,20 +161,20 @@ void loop() {
   // Implement control by updating small signal portion of PWM duty cycle
   if (controlOn && PWMDutyCycleLarge > 0) {
     // Calculate new small signal portion used to update total duty cycle
-    PWMDutyCycleSmall = -k1 * currentTheta - k2 * thetaDot;
+    PWMDutyCycleSmall = -1 * k1 * currentTheta - k2 * thetaDot;
   }
   else {
     PWMDutyCycleSmall = 0;
   }
 
-  // Convert PWM from percentage to actual value -- TODO double check this
-  PWMDutyCycleSmall = PWMDutyCycleSmall / 100 * MAX_DUTY_CYCLE;
+  // Convert small signal PWM from fractional value to actual value
+  PWMDutyCycleSmall = PWMDutyCycleSmall * MAX_DUTY_CYCLE;
 
   // Add large and small signal components to get total updated duty cycle
   PWMDutyCycleTotal = PWMDutyCycleLarge + PWMDutyCycleSmall;
 
   // If limits are exceeded, cut motor power
-  if (currentTheta > PI/2.5 || currentTheta < -PI/2){
+  if (currentTheta > PI/2.5 || currentTheta < -PI/2.2){
     PWMDutyCycleTotal = 0;
   }
     

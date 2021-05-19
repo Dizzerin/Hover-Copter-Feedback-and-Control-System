@@ -32,22 +32,20 @@ const int encoderPinB = 16;   // Shaft angle encoder input pin B -- GPIO pin 16 
 
 // Basic Parameters
 const float resistor = 0.5;     // Resistor value in ohms (R3 on schematic, resistor used for measuing current to motor)
-//const float armLength = 0;
-//const float armMass = 0;
-//const float motorMass = 0;
-//const float inertia = 0;
-//const float viscousFriction = 0;  // b
-//const float drag = 0;
 
 // State Feeback Controller Parameters - obtained using Matlab or Octave
+// Manual placed poles
 // float k1 = 3.8093;    // Konrads manual placed poles
 // float k2 = 0.5944;    // Konrads manual placed poles
-// const float k1 = 0.39259;   // Our manual placed poles
-// const float k2 = 0.065299;  // Our manual placed poles
-// const float k1 = 0.3162;    // Our first LQR placed poles
-// const float k2 = 0.1205;    // Our first LQR placed poles
-float k1 = 2.2361;    // Our second LQR placed poles
-float k2 = 1.0153;    // Our second LQR placed poles
+float k1 = 0.39259;   // Our 1st manual placed poles
+float k2 = 0.065299;  // Our 1st manual placed poles
+// float k1 = 3.12;      // Our 2nd manual placed poles
+// float k2 = 0.065;     // Our 2nd manual placed poles
+// float k1 = 4.0;       // Our 3rd manual placed poles
+// float k2 = 0.95;      // Our 3rd manual placed poles
+// LQR placed poles
+// float k1 = 0.3162;    // Our first LQR placed poles
+// float k2 = 0.1205;    // Our first LQR placed poles
 
 // 6302view Initialization
 #define STEP_TIME 5000              // Time between loops/steps in microseconds
@@ -86,37 +84,39 @@ float motorCurrent = 0.0;                   // Current being delivered to the mo
 //float deltaT = STEP_TIME/(10^6);    // Time span between samples in seconds -- used for calculating estimated time derivatives -- 6302's communication manager handles this and ensures this delay between loops/steps
 float deltaT = 0.005;           // Time span between samples in seconds -- used for calculating estimated time derivatives -- 6302's communication manager handles this and ensures this delay between loops/steps
 bool controlOn = false;         // Toggle for enabling feedback control algorithms
+bool powerOn = false;           // Toggle to control power to the motor
 bool setZeroPoint = false;      // Button to set the current hover arm position as the 0 point (theta=0 should correspond to horizontal)
 
 
 void setup() {
-   // Add modules for 6302view (general format: pointer to var, title, other options)
-   // Buttons
-   comManager.addButton(&setZeroPoint, "Set 0 point");
-   // Toggles
-   comManager.addToggle(&controlOn, "Enable Feedback Control");
-   // Sliders
-   comManager.addSlider(&PWMDutyCycleLarge, "PWM Duty Cycle", 0, MAX_DUTY_CYCLE, 1);   // Slider to control PWM/Duty Cycle
-   comManager.addSlider(&k1, "k1", 0, 4, 0.05);
-   comManager.addSlider(&k2, "k2", 0, 3, 0.05);
-   // Numbers
-   comManager.addNumber(&voltageDrop, "R3 Voltage Drop (V)");                     // Max of about 1 volt
-   comManager.addNumber(&motorCurrent, "Motor Current (Amps)");                   // Max of about 2 amps
-   comManager.addNumber(&currentThetaDegree, "Theta (deg)");                      // Current hover arm angle in degrees
-   comManager.addNumber(&thetaDot, "Theta Dot (rad/s)");                          // Derivative of hover arm position in radians per second
-   comManager.addNumber(&deltaT, "Delta T");                                      // Time span between samples (should be constant based on STEP_TIME)
-   // Plots
-   comManager.addPlot(&currentThetaDegree, "Theta (deg)", -100, 100);             // Current hover arm angle in degrees
-   comManager.addPlot(&thetaDot, "Theta Dot (rad/s)", -8, 8);               // Derivative of hover arm position in radians per second
+  // Add modules for 6302view (general format: pointer to var, title, other options)
+  // Buttons
+  comManager.addButton(&setZeroPoint, "Set 0 point");
+  // Toggles
+  comManager.addToggle(&controlOn, "Feedback Control");
+  comManager.addToggle(&powerOn, "Power");
+  // Numbers
+  comManager.addNumber(&voltageDrop, "R3 Voltage Drop (V)");                     // Max of about 1 volt
+  comManager.addNumber(&motorCurrent, "Motor Current (Amps)");                   // Max of about 2 amps
+  comManager.addNumber(&currentThetaDegree, "Theta Angle (deg)");                // Current hover arm angle in degrees
+  comManager.addNumber(&thetaDot, "Theta Dot (rad/s)");                          // Derivative of hover arm position in radians per second
+  comManager.addNumber(&deltaT, "Delta T (seconds)");                            // Time span between samples (should be constant based on STEP_TIME)
+  // Plots
+  comManager.addPlot(&currentThetaDegree, "Theta Angle (deg)", -100, 100);          // Current hover arm angle in degrees
+  comManager.addPlot(&thetaDot, "Theta Dot (rad/s)", -8, 8);                        // Derivative of hover arm position in radians per second
 //   comManager.addPlot(&motorCurrent, "Motor Current (Amps)", 0, 2.5);             // Max of about 2 amps
 //   comManager.addPlot(&voltageDrop, "R3 Voltage Drop (V)", 0, 1.1);               // Max of about 1 volt
 //   comManager.addPlot(&voltageHighFloat, "High side Voltage (V)", 0, 3.5);        // Max of about 3.3 volts
 //   comManager.addPlot(&voltageLowFloat, "Low side Voltage (V)", 0, 2.5);          // Max of about 2.3 volts
-  comManager.addPlot(&PWMDutyCycleSmall, "Small Signal Duty Cycle", -MAX_DUTY_CYCLE, MAX_DUTY_CYCLE);
-  comManager.addPlot(&PWMDutyCycleTotal, "Total Duty Cycle", -MAX_DUTY_CYCLE, MAX_DUTY_CYCLE);
+  comManager.addPlot(&PWMDutyCycleSmall, "Small Signal Duty Cycle", -3000, 3000);
+  comManager.addPlot(&PWMDutyCycleTotal, "Total Duty Cycle", -100, 3000);
+  // Sliders
+  comManager.addSlider(&PWMDutyCycleLarge, "PWM Duty Cycle", 0, MAX_DUTY_CYCLE, 1);   // Slider to control PWM/Duty Cycle
+  comManager.addSlider(&k1, "k1", 0, 4, 0.05);
+  comManager.addSlider(&k2, "k2", 0, 3, 0.05);
     
-   // Connect to 6302view via serial communication
-   comManager.connect(&Serial, 115200);
+  // Connect to 6302view via serial communication
+  comManager.connect(&Serial, 115200);
 
   // Setup PWM channels, frequency, and resolution
   ledcSetup(PWMChannel, PWMFreq, PWMResolution);
@@ -173,8 +173,8 @@ void loop() {
   // Add large and small signal components to get total updated duty cycle
   PWMDutyCycleTotal = PWMDutyCycleLarge + PWMDutyCycleSmall;
 
-  // If limits are exceeded, cut motor power
-  if (currentTheta > PI/2.5 || currentTheta < -PI/2.2){
+  // If limits are exceeded, if the PWM value is negative, or if the power is not enabled, cut motor power
+  if (currentTheta > PI/2.5 || currentTheta < -PI/2.2 || PWMDutyCycleTotal < 0 || !powerOn){
     PWMDutyCycleTotal = 0;
   }
     

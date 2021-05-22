@@ -1,7 +1,7 @@
 /* Info
  * Author: Caleb Nelson
- * Revision: 0.5
- * Last Edit: 5/10/2021
+ * Revision: 0.6
+ * Last Edit: 5/21/2021
  * 
  * Description
  *  This program is used to control a hover copter arm for feedback and control systems course offered at Walla Walla University
@@ -33,19 +33,14 @@ const int encoderPinB = 16;   // Shaft angle encoder input pin B -- GPIO pin 16 
 // Basic Parameters
 const float resistor = 0.5;     // Resistor value in ohms (R3 on schematic, resistor used for measuing current to motor)
 
-// State Feeback Controller Parameters - obtained using Matlab or Octave
+// Control Gain Matrix Parameters for State Feeback Controller -- used to place the poles/eigenvalues at desired location -- obtained using Matlab or Octave
 // Manual placed poles
-// float k1 = 3.8093;    // Konrads manual placed poles
-// float k2 = 0.5944;    // Konrads manual placed poles
-float k1 = 0.39259;   // Our 1st manual placed poles
-float k2 = 0.065299;  // Our 1st manual placed poles
-// float k1 = 3.12;      // Our 2nd manual placed poles
-// float k2 = 0.065;     // Our 2nd manual placed poles
-// float k1 = 4.0;       // Our 3rd manual placed poles
-// float k2 = 0.95;      // Our 3rd manual placed poles
+// float k[] = {3.8093, 0.5944};    // Konrads manual placed poles
+float k[] = {0.39259, 0.065299};    // Our 1st manual placed poles
+// float k[] = {3.12, 0.065};       // Our 2nd manual placed poles
+// float k[] = {4.0, 0.95};         // Our 3rd manual placed poles
 // LQR placed poles
-// float k1 = 0.3162;    // Our first LQR placed poles
-// float k2 = 0.1205;    // Our first LQR placed poles
+// float k[] = {0.3162, 0.1205};    // Our first LQR placed poles
 
 // 6302view Initialization
 #define STEP_TIME 5000              // Time between loops/steps in microseconds
@@ -112,8 +107,8 @@ void setup() {
   comManager.addPlot(&PWMDutyCycleTotal, "Total Duty Cycle", -100, 3000);
   // Sliders
   comManager.addSlider(&PWMDutyCycleLarge, "PWM Duty Cycle", 0, MAX_DUTY_CYCLE, 1);   // Slider to control PWM/Duty Cycle
-  comManager.addSlider(&k1, "k1", 0, 4, 0.05);
-  comManager.addSlider(&k2, "k2", 0, 3, 0.05);
+  comManager.addSlider(&k[0], "k1", 0, 4, 0.05);
+  comManager.addSlider(&k[1], "k2", 0, 3, 0.05);
     
   // Connect to 6302view via serial communication
   comManager.connect(&Serial, 115200);
@@ -161,7 +156,7 @@ void loop() {
   // Implement control by updating small signal portion of PWM duty cycle
   if (controlOn && PWMDutyCycleLarge > 0) {
     // Calculate new small signal portion used to update total duty cycle
-    PWMDutyCycleSmall = -1 * k1 * currentTheta - k2 * thetaDot;
+    PWMDutyCycleSmall = -1 * k[0] * currentTheta - k[1] * thetaDot;
   }
   else {
     PWMDutyCycleSmall = 0;
@@ -176,6 +171,10 @@ void loop() {
   // If limits are exceeded, if the PWM value is negative, or if the power is not enabled, cut motor power
   if (currentTheta > PI/2.5 || currentTheta < -PI/2.2 || PWMDutyCycleTotal < 0 || !powerOn){
     PWMDutyCycleTotal = 0;
+  }
+  // If max duty cycle is exceeded, set it to the max
+  if (PWMDutyCycleTotal > MAX_DUTY_CYCLE){
+    PWMDutyCycleTotal = MAX_DUTY_CYCLE;
   }
     
   // Set updated PWM output to desired duty cycle

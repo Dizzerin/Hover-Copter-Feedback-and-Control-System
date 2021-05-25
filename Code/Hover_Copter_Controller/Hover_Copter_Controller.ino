@@ -1,13 +1,17 @@
 /* Info
  * Author: Caleb Nelson
- * Revision: 0.6
- * Last Edit: 5/21/2021
+ * Revision: 0.7
+ * Last Edit: 5/25/2021
  * 
  * Description
  *  This program is used to control a hover copter arm for feedback and control systems course offered at Walla Walla University
  *  It currently implements a basic state feedback control algorithm with "hand placed" pole locations, where we arbitrarily chose
  *  pole locations in the left half of the complex plane and used Matlab/Octave to find the necessary controller gain parameters to 
  *  force the system to have the poles we chose.
+ *  
+ * Note: If you get the compile error "ledcSetup was not declared in this scope" that indicates the ESP32 board is not selected.
+ * 
+ * IN PROGRESS TEMP VERSION DON'T USE
  */
 #include <Six302.h>           // https://github.com/almonds0166/6302view -- requires python packages pyserial and websockets
 #include <Encoder.h>          // Encoder by Paul Stoffregen -- https://www.pjrc.com/teensy/td_libs_Encoder.html -- https://github.com/PaulStoffregen/Encoder
@@ -33,14 +37,24 @@ const int encoderPinB = 16;   // Shaft angle encoder input pin B -- GPIO pin 16 
 // Basic Parameters
 const float resistor = 0.5;     // Resistor value in ohms (R3 on schematic, resistor used for measuing current to motor)
 
+// Mathematical state space model related matricies
+float A[2][2] = {{1, 1}, {1, 1}};       // Discretized A matrix from state space model
+float B[2] = {1, 1};                    // B matrix from state space model
+float lastX[2] = {0.0, 0.0};            // Last x -- x is state matrix = [theta, thetaDot]
+float currentX[2] = {0.0, 0.0};         // Current x -- x is state matrix = [theta, thetaDot]
+float lastXHat[2] = {0.0, 0.0};         // Last estimated x -- xHat is the estimated state matrix from observer.  For full order observer xHat = [theta, thetaDot]
+float currentXHat[2] = {0.0, 0.0};      // Current estimated x -- xHat is the estimated state matrix from observer.  For full order observer xHat = [theta, thetaDot]
+// float observerDiff[2] = {0.0, 0.0};  // Difference between measured state x and observer estimated state xHat.  Claculted as x-xHat
+
 // Control Gain Matrix Parameters for State Feeback Controller -- used to place the poles/eigenvalues at desired location -- obtained using Matlab or Octave
-// Manual placed poles
-// float k[] = {3.8093, 0.5944};    // Konrads manual placed poles
-float k[] = {0.39259, 0.065299};    // Our 1st manual placed poles
-// float k[] = {3.12, 0.065};       // Our 2nd manual placed poles
-// float k[] = {4.0, 0.95};         // Our 3rd manual placed poles
-// LQR placed poles
-// float k[] = {0.3162, 0.1205};    // Our first LQR placed poles
+// float G[2] = {3.8093, 0.5944};    // Konrads manual placed poles
+float G[2] = {0.39259, 0.065299};    // Our 1st manual placed poles
+// float G[2] = {3.12, 0.065};       // Our 2nd manual placed poles
+// float G[2] = {4.0, 0.95};         // Our 3rd manual placed poles
+// float G[2] = {0.3162, 0.1205};    // Our first LQR placed poles
+
+// Gain Matrix Parameters for the observer -- to place the poles/eigenvalues of the observer at desired location -- makes error go to 0 and xhat converge to x
+float K[2] = {1, 1};                  // LQE/LRQ placed poles
 
 // 6302view Initialization
 #define STEP_TIME 5000              // Time between loops/steps in microseconds
@@ -59,10 +73,10 @@ const int MAX_DUTY_CYCLE = (int)(pow(2, PWMResolution)-1);
 // Encoder and Angle Related Initialization
 Encoder myEncoder(encoderPinA, encoderPinB);  // Initilization for encoder reading
 int currentEncoderPos = 0;                    // Current encoder position
-float lastTheta = 0.0;                        // Last hover arm angle in radians
-float currentTheta = 0.0;                     // Current hover arm angle in radians
+//float lastTheta = 0.0;                        // Last hover arm angle in radians
+//float currentTheta = 0.0;                     // Current hover arm angle in radians
 float currentThetaDegree = 0.0;               // Current hover arm angle in degrees
-float thetaDot = 0.0;                         // Approximate derivate of angle in radians per second
+//float thetaDot = 0.0;                         // Approximate derivate of angle in radians per second
 
 // Electical ADC Voltage and Current Related Initialization
 int ADCValueHigh = 0;                       // ADC input value from high voltage side of R3
@@ -77,10 +91,11 @@ float motorCurrent = 0.0;                   // Current being delivered to the mo
 
 // Other Initialization
 //float deltaT = STEP_TIME/(10^6);    // Time span between samples in seconds -- used for calculating estimated time derivatives -- 6302's communication manager handles this and ensures this delay between loops/steps
-float deltaT = 0.005;           // Time span between samples in seconds -- used for calculating estimated time derivatives -- 6302's communication manager handles this and ensures this delay between loops/steps
-bool controlOn = false;         // Toggle for enabling feedback control algorithms
-bool powerOn = false;           // Toggle to control power to the motor
-bool setZeroPoint = false;      // Button to set the current hover arm position as the 0 point (theta=0 should correspond to horizontal)
+float deltaT = 0.005;                 // Time span between samples in seconds -- used for calculating estimated time derivatives -- 6302's communication manager handles this and ensures this delay between loops/steps
+bool controlOn = false;               // Toggle for enabling feedback control algorithms
+bool powerOn = false;                 // Toggle to control power to the motor
+bool observerOn = false;              // Toggle to control observer being used
+bool setZeroPoint = false;            // Button to set the current hover arm position as the 0 point (theta=0 should correspond to horizontal)
 
 
 void setup() {
@@ -90,15 +105,16 @@ void setup() {
   // Toggles
   comManager.addToggle(&controlOn, "Feedback Control");
   comManager.addToggle(&powerOn, "Power");
+  comManager.addToggle(&observerOn, "Observer");
   // Numbers
   comManager.addNumber(&voltageDrop, "R3 Voltage Drop (V)");                     // Max of about 1 volt
   comManager.addNumber(&motorCurrent, "Motor Current (Amps)");                   // Max of about 2 amps
   comManager.addNumber(&currentThetaDegree, "Theta Angle (deg)");                // Current hover arm angle in degrees
-  comManager.addNumber(&thetaDot, "Theta Dot (rad/s)");                          // Derivative of hover arm position in radians per second
+  comManager.addNumber(&currentX[1], "Theta Dot (rad/s)");                       // Derivative of hover arm position in radians per second
   comManager.addNumber(&deltaT, "Delta T (seconds)");                            // Time span between samples (should be constant based on STEP_TIME)
   // Plots
   comManager.addPlot(&currentThetaDegree, "Theta Angle (deg)", -100, 100);          // Current hover arm angle in degrees
-  comManager.addPlot(&thetaDot, "Theta Dot (rad/s)", -8, 8);                        // Derivative of hover arm position in radians per second
+  comManager.addPlot(&currentX[1], "Theta Dot (rad/s)", -8, 8);                     // Derivative of hover arm position in radians per second
 //   comManager.addPlot(&motorCurrent, "Motor Current (Amps)", 0, 2.5);             // Max of about 2 amps
 //   comManager.addPlot(&voltageDrop, "R3 Voltage Drop (V)", 0, 1.1);               // Max of about 1 volt
 //   comManager.addPlot(&voltageHighFloat, "High side Voltage (V)", 0, 3.5);        // Max of about 3.3 volts
@@ -107,8 +123,8 @@ void setup() {
   comManager.addPlot(&PWMDutyCycleTotal, "Total Duty Cycle", -100, 3000);
   // Sliders
   comManager.addSlider(&PWMDutyCycleLarge, "PWM Duty Cycle", 0, MAX_DUTY_CYCLE, 1);   // Slider to control PWM/Duty Cycle
-  comManager.addSlider(&k[0], "k1", 0, 4, 0.05);
-  comManager.addSlider(&k[1], "k2", 0, 3, 0.05);
+  comManager.addSlider(&G[0], "G1", 0, 4, 0.05);
+  comManager.addSlider(&G[1], "G2", 0, 3, 0.05);
     
   // Connect to 6302view via serial communication
   comManager.connect(&Serial, 115200);
@@ -145,18 +161,29 @@ float get_motor_current(){
 
 
 void loop() {
-  // Update vars
-  lastTheta = currentTheta;
+  // Preserve old data
+  lastX[0] = currentX[0];
+  lastX[1] = currentX[1];
+  lastXHat[0] = currentXHat[0];
+  lastXHat[1] = currentXHat[1];
+
+  // Get new data
   currentEncoderPos = -1 * myEncoder.read();            // Note: This is negative becuase of the way our hover copter arm is setup.  Counter clockwise on the encoder is actually clockwise the way we look at it
-  currentTheta = float(currentEncoderPos)*(2*PI)/10000; // Encoder value of 10000 corresponds to 2 pi radians or 360 degrees
-  currentThetaDegree = currentTheta * RAD_TO_DEG;       // Convert to degrees for display
+  currentX[0] = float(currentEncoderPos)*(2*PI)/10000;  // Encoder value of 10000 corresponds to 2 pi radians or 360 degrees
+  currentThetaDegree = currentX[0] * RAD_TO_DEG;        // Convert to degrees for display
   motorCurrent = get_motor_current();
-  thetaDot = (currentTheta-lastTheta)/deltaT;           // Recalculate derivative (radians/sec)
+  currentX[1] = (currentX[0]-lastX[0])/deltaT;          // Recalculate derivative (radians/sec)
+  // observerDiff = x - xHat;                             // Observer error
+
+  // Update observer values
+  xHat[0] = ((A[0][0]-K[0]-B[0]*G[0])*deltaT+1)*lastXHat[0]+((A[0][1]-B[0]*G[1]*deltaT)*lastXHat[1])+K[0]*deltaT*currentY[0];
+  xHat[1] = ((A[1][0]-K[1]-B[1]*G[0])*deltaT)*lastXHat[0]+((A[1][1]-B[1]*G[1]*deltaT+1)*lastXHat[1])+K[1]*deltaT*currentY[0];
+  
   
   // Implement control by updating small signal portion of PWM duty cycle
   if (controlOn && PWMDutyCycleLarge > 0) {
     // Calculate new small signal portion used to update total duty cycle
-    PWMDutyCycleSmall = -1 * k[0] * currentTheta - k[1] * thetaDot;
+    PWMDutyCycleSmall = -1 * G[0] * currentX[0] - G[1] * currentX[1];
   }
   else {
     PWMDutyCycleSmall = 0;
@@ -169,7 +196,7 @@ void loop() {
   PWMDutyCycleTotal = PWMDutyCycleLarge + PWMDutyCycleSmall;
 
   // If limits are exceeded, if the PWM value is negative, or if the power is not enabled, cut motor power
-  if (currentTheta > PI/2.5 || currentTheta < -PI/2.2 || PWMDutyCycleTotal < 0 || !powerOn){
+  if (currentX[0] > PI/2.5 || currentX[0] < -PI/2.2 || PWMDutyCycleTotal < 0 || !powerOn){
     PWMDutyCycleTotal = 0;
   }
   // If max duty cycle is exceeded, set it to the max

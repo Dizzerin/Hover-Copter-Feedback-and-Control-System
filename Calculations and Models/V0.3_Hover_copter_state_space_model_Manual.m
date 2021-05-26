@@ -4,17 +4,17 @@
 % Revision: 0.3
 % Revision Info: Actual system model (horizontal instead of hanging down)
 %                with state feedback - manual pole placement
-% Last Edit: 5/13/2021
+% Last Edit: 5/26/2021
 % 
 % Description
 %   This script is used to model and control a hover arm
 %   for the feedback and control systems course offered 
 %   at Walla Walla University
 %   
-%   This v0.3 of the script uses a new model (not the model from v1) to model the
-%   system with the theta angle defined to be 0 when the hover arm is horizontal
-%   and with state feedback gain parameters included.
-%   Instead of the system being x_dot = Ax + Bu we now have x_dot = (A-BK)*x
+%   This v0.3 of the script uses a new model (not the hanging down model from 
+%   v0.2) to model the system with the theta angle defined to be 0 when the 
+%   hover arm is horizontal and with state feedback gain parameters included.
+%   Instead of the system being x_dot = Ax + Bu we now have x_dot = (A-BG)*x
 %   The controller feeback gain parameters are set by manually placing them
 %   to some arbitry but reasonable values in the left hand plane
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -87,7 +87,7 @@ rank_of_controlability_matrix = rank(controlabilty_matrix)
 % Get singular value decomposition to see how controlable it is in each direction
 [U,S,V] = svd(controlabilty_matrix,'econ');
 
-% Desired pole locations -- Manually place poles -- Find controller gain matrix K so that poles are where we want them
+% Desired pole locations -- Manually place poles -- Find controller gain matrix G so that poles are where we want them
 ##desired_eigs = [-1.0;-1.1];     % Not aggresive enough
 ##desired_eigs = [-2.0;-2.1];
 ##desired_eigs = [-3.0;-3.1];
@@ -98,15 +98,15 @@ rank_of_controlability_matrix = rank(controlabilty_matrix)
 desired_eigs = [-10;-11];
 %desired_eigs = [-12;-13];
 
-disp('Your propotinal feedback gain controller K is:')
-K = place(A,B,desired_eigs)
+disp('Your propotinal feedback gain controller G is:')
+G = place(A,B,desired_eigs)
 
 % Verify poles/eigenvalues are where we want them with the controller implemented -- negative poles are stable since they are in the left hand plane
-disp('The poles of the system with closed loop feedback A-B*K with the K controller implemented are:')
-eig(A-B*K)
+disp('The poles of the system with closed loop feedback A-B*G with the G controller implemented are:')
+eig(A-B*G)
 
 % Controlled System
-Ac = A-B*K;
+Ac = A-B*G;
 Bc = [0;0];
 Cc = C;
 Dc = 0;
@@ -126,7 +126,7 @@ disp('The eigenvectors and eigenvalues of A for the controlled system are:')
 
 % Plot duty cycle -- make sure this small signal part isn't too big -- shows what small signal duty cycle is being added
 figure();
-plot(t,-K*Y');
+plot(t,-G*Y');
 title('Small signal duty cycle');
 ylabel('Duty Cycle');
 xlabel('Time (s)');
@@ -135,7 +135,7 @@ xlabel('Time (s)');
 % plot controlled and uncontrolled system
 % for controlled system just update the fM
 % fM = FM + fm
-% fm = -K*x
+% fm = -G*x
 FM = 10;
 fm = 0;
 fM = FM + fm;

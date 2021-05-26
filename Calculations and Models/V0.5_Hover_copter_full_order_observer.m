@@ -1,9 +1,8 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Info
 % Author: Caleb Nelson
-% Revision: 0.4
-% Revision Info: Actual system model (horizontal instead of hanging down)
-%                with state feedback
+% Revision: 0.5
+% Revision Info: System model with feedback and full order observer
 % Last Edit: 5/26/2021
 % 
 % Description
@@ -11,10 +10,10 @@
 %   for the feedback and control systems course offered 
 %   at Walla Walla University
 %   
-%   This v0.4 of the script uses the same model from v0.3 where x_dot = (A-BG)*x
-%   Except in this script, the controller feeback gain parameters are set two ways.
-%   First, they are set by manually placing them, and then later they are overwritten 
-%   and set using LQR.  I have both methods here just to show how they are each done
+% This v0.5 of the script uses the same state space model for the system used 
+% in the previous version (v0.4) except this version adds a full order observer
+% and various graphs and models regarding its full state estimation.
+% Here G is the gain matrix for the system and K is the gain matrix for the observer
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 clear all;
 close all;

@@ -40,9 +40,8 @@ const int encoderPinB = 16;   // Shaft angle encoder input pin B -- GPIO pin 16 
 const float resistor = 0.5;   // Resistor value in ohms (R3 on schematic, resistor used for measuing current to motor)
 
 // Mathematical state space model related matricies
-// TODO the values for the A and B matricies still need to be discretized and updated here
-float A[2][2] = {{0, 1}, {0, -0.41}};     // Discretized A matrix from state space model
-float B[2] = {0, -1.1};                   // B matrix from state space model
+float A[2][2] = {{0, 1}, {0, -0.41}};     // Continuous time A matrix from state space model
+float B[2] = {0, 117.76623};              // Continuous time B matrix from state space model
 // Sates and measurements -- the state matricies are defined as [theta, thetaDot] in radians and radians/sec respsectively.
 float measuredTheta = 0.0;                // Measured angle theta in radians
 float lastEstimatedX[2] = {0.0, 0.0};     // Last estimated full state x -- this estimate is based on manual calculations approximating thetaDot as (currentTheta-lastTheta)/deltaT
@@ -54,13 +53,14 @@ float estimatedXDiff[2] = {0.0, 0.0};     // Difference between measured state x
 
 // Control Gain Matrix Parameters for State Feeback Controller -- used to place the poles/eigenvalues at desired location -- obtained using Matlab or Octave
 // float G[2] = {3.8093, 0.5944};   // Konrads manual placed poles
-float G[2] = {0.39259, 0.065299};   // Our 1st manual placed poles
+// float G[2] = {0.39259, 0.065299};   // Our 1st manual placed poles
 // float G[2] = {3.12, 0.065};      // Our 2nd manual placed poles
-// float G[2] = {4.0, 0.95};        // Our 3rd manual placed poles
+float G[2] = {4.0, 0.95};        // Our 3rd manual placed poles
 // float G[2] = {0.3162, 0.1205};   // Our first LQR placed poles
 
 // Gain Matrix Parameters for the observer -- to place the poles/eigenvalues of the observer at desired location -- makes error go to 0 and xhat converge to x
-float K[2] = {1, 1};                // LQE/LRQ placed poles
+// float K[2] = {0.6998, 0.7248};      // LQE/LRQ placed poles - poles at -10, -11
+float K[2] = {7.6627, 0.5145};      // LQE/LRQ placed poles - poles at -30, -31
 
 // 6302view Initialization
 #define STEP_TIME 5000              // Time between loops/steps in microseconds
@@ -113,13 +113,14 @@ void setup() {
 // comManager.addNumber(&voltageDrop, "R3 Voltage Drop (V)");                     // Max of about 1 volt
 // comManager.addNumber(&motorCurrent, "Motor Current (Amps)");                   // Max of about 2 amps
   comManager.addNumber(&currentThetaDegree, "Theta Angle (deg)");                 // Current hover arm angle in degrees
-  comManager.addNumber(&currentEstimatedX[1], "Theta Dot (rad/s)");               // Derivative of hover arm position in radians per second
+// comManager.addNumber(&currentEstimatedX[1], "Theta Dot (rad/s)");               // Derivative of hover arm position in radians per second
 // comManager.addNumber(&deltaT, "Delta T (seconds)");                            // Time span between samples (should be constant based on STEP_TIME)
   // Plots
   comManager.addPlot(&currentThetaDegree, "Theta Angle (deg)", -100, 100);          // Current hover arm angle in degrees
-  comManager.addPlot(&estimatedXDiff[0], "Measured Theta - Observer Theta (deg)", -PI, PI)  // Difference between the measured and the observer estimated theta
-  comManager.addPlot(&estimatedXDiff[1], "Estimated ThetaDot - Observer ThetaDot (rad/s)", -10, 10)  // Difference between the manually estimated and the observer estimated thetaDot
-//  comManager.addPlot(&currentEstimatedX[1], "Theta Dot (rad/s)", -8, 8);                  // Derivative of hover arm position in radians per second
+  comManager.addPlot(&estimatedXDiff[0], "Measured Theta - Observer Theta (deg)", -PI, PI);  // Difference between the measured and the observer estimated theta
+  comManager.addPlot(&estimatedXDiff[1], "Estimated ThetaDot - Observer ThetaDot (rad/s)", -10, 10);  // Difference between the manually estimated and the observer estimated thetaDot
+  comManager.addPlot(&currentEstimatedX[1], "Estimated Theta Dot (rad/s)", -8, 8);                  // Derivative of hover arm position in radians per second
+  comManager.addPlot(&currentXHat[1], "Observer Theta Dot (rad/s)", -8, 8);                  // Derivative of hover arm position in radians per second
 //  comManager.addPlot(&motorCurrent, "Motor Current (Amps)", 0, 2.5);             // Max of about 2 amps
 //  comManager.addPlot(&voltageDrop, "R3 Voltage Drop (V)", 0, 1.1);               // Max of about 1 volt
 //  comManager.addPlot(&voltageHighFloat, "High side Voltage (V)", 0, 3.5);        // Max of about 3.3 volts
@@ -130,6 +131,8 @@ void setup() {
   comManager.addSlider(&PWMDutyCycleLarge, "PWM Duty Cycle", 0, MAX_DUTY_CYCLE, 1);   // Slider to control PWM/Duty Cycle
   comManager.addSlider(&G[0], "G1", 0, 4, 0.05);
   comManager.addSlider(&G[1], "G2", 0, 3, 0.05);
+  comManager.addSlider(&K[0], "K1", 0, 4, 0.05);
+  comManager.addSlider(&K[1], "K2", 0, 4, 0.05);
     
   // Connect to 6302view via serial communication
   comManager.connect(&Serial, 115200);

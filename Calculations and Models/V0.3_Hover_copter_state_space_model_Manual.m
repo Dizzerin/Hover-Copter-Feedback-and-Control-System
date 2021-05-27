@@ -20,6 +20,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 clear all;
 close all;
+clc;
 pkg load control
 pkg load signal
 %pkg load symbolic
@@ -57,8 +58,9 @@ j_system = 1/3*m_rod_to_pivot*l_rod_to_pivot^2 + 1/3*m_rod_extra*l_rod_extra^2 +
 % State Space Model (for actual use case)
 A = [[0,1];[0,-b]];
 B = [[0];[l_rod_to_pivot/j_system]];
-%C = [1,0];
-C = eye(2);                               % 2x2 identity matrix -- assumes all states are availble/observable as outputs
+% for C matrix: num rows = num outputs (and number of measurements being taken simultaneously) and num columns = num states
+C = eye(2);   % 2x2 identity matrix -- assumes all states are being measured and reported as output y
+%C = [1,0];   % just theta is being measured and reported as an ouput y
 D = [0];
 
 % Create state space model for pendulum

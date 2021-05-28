@@ -3,7 +3,7 @@
 % Author: Caleb Nelson
 % Revision: 0.5
 % Revision Info: System model with feedback and full order observer
-% Last Edit: 5/26/2021
+% Last Edit: 5/28/2021
 % 
 % Description
 %   This script is used to model and control a hover arm
@@ -69,18 +69,18 @@ j_system = 1/3*m_rod_to_pivot*l_rod_to_pivot^2 + 1/3*m_rod_extra*l_rod_extra^2 +
 
 %% DEVELOP STATE SPACE MODEL FOR UNCONTROLLED SYSTEM
 % State Space Model
-A = [[0,1];[0,-b]];
-B = [[0];[l_rod_to_pivot/j_system]];
+A = [0 1; 0 -b];
+B = [0; l_rod_to_pivot/j_system];
 % for C matrix: num rows = num outputs (and number of measurements being taken simultaneously) and num columns = num states
-C = eye(2);   % 2x2 identity matrix -- assumes all states are being measured and reported as output y
-%C = [1,0];   % just theta is being measured and reported as an ouput y
+C = eye(2);         % 2x2 identity matrix -- assumes all states are being measured and reported as output y
+%C = [1 0; 0 0];    % just theta is being measured and reported as an ouput y
 D = [0];
 
 %% DEVELOP STATE SPACE MODEL FOR CONTROLLED SYSTEM WITH FEEDBACK
 % X for this system is [theta, omega]
 % Find controller gain matrix G for the controlled system so that poles are in the left hand plane
 % Use LQR to determine and choose poles
-Q = [5,0;0,1];
+Q = [5 0; 0 1];
 R = 1;
 G = lqr(A,B,Q,R)
 % Verify poles/eigenvalues are where we want them with the controller implemented -- negative poles are stable since they are in the left hand plane
@@ -90,8 +90,8 @@ eig(A-B*G)
 % Create Controlled System (system with feedback and control -- observer not included in this state space model)
 % Reminder: X for this system is [theta, omega]
 A_con = A-B*G;
-B_con = [0;0];
-C_con = [1 0;0 0];  % Saying we can only measure theta, theta is the only output, all the theta dot (omega) outputs will be 0 in Y
+B_con = [0; 0];
+C_con = [1 0; 0 0];  % -- QUESTION - Does this do what I want?-->  Saying we can only measure theta, theta is the only output, all the theta dot (omega) outputs will be 0 in Y
 D_con = 0;
 controlled_sys = ss(A_con,B_con,C_con,D_con);
 
@@ -102,9 +102,9 @@ initial_angle = pi/3;     % initial angle
 initial_omega = 0.2;      % initial theta dot or omega or angular velocity (all equivalent)
 [Y,T,X] = lsim(controlled_sys,U,t,[initial_angle;initial_omega]);  % doesn't plot when output arguments are desired
 
-% Check eigenvectors and eigenvalues
-disp('The eigenvectors and eigenvalues of A for the controlled system are:')
-[eigenvectors, eigenvalues] = eig(controlled_sys.a)
+##% Check eigenvectors and eigenvalues
+##disp('The eigenvectors and eigenvalues of A for the controlled system are:')
+##[eigenvectors, eigenvalues] = eig(controlled_sys.a)
 
 
 
@@ -116,39 +116,60 @@ disp('The eigenvectors and eigenvalues of A for the controlled system are:')
 % find gain matrix K for the observer so that poles are in the left hand plane
 % Note the use of A and C transpose, they are transposed because the system has K*C instead of C*K
 % See written documentation for more info on that.
+##########CHECK BELOW -- Also check X transpose stuff, x and x_substate should match
 % Using manual pole placement:
-obs_poles = [-100, -101];
+obs_poles = [-10, -11];
 K = place(A',C',obs_poles)
+
 % Using LQR pole placement:
-Q = [10,0;0,10];
-R = [0.01 0;0 0.01];
-K = lqr(A',C',Q,R)
+Q = [10 0; 0 10];
+R = [0.01 0; 0 0.01];
+##K = lqr(A',C',Q,R)
+
+% Using Kalman Filer pole placement:
+Q = [10 0; 0 10];
+R = [0.01 0; 0 0.01];
+##[kf,L,~,Mx,Z] = kalman(observer_system,Q,R);
+
+%%  Build Kalman filter
+%%  Augment system with disturbances and noise
+Vd = .1*eye(2);   % disturbance covariance
+Vn = 1;           % noise covariance
+##[L,P,E] = lqe(A,Vd,C,Vd,Vn);  % design Kalman filter
+##Kf = (lqr(A',C',Vd,Vn))';     % alternatively, possible to design using "LQR" code
+##sysKF = ss(A-L*C,[B L],eye(2),0*[B L]);  % Kalman filter estimator
+
 % Verify poles/eigenvalues are where we want them with the controller implemented -- negative poles are stable since they are in the left hand plane
 disp('The poles of the observer are A-K*C which are:')
 eig(A-K*C)
 
+
 % Create Observer System
 % Reminder: X for this system is [theta_hat, omega_hat]
-A_obs = A-K*C
-B_obs = [B K]    % Observer has both u and Y as inputs
-C_obs = C
-D_obs = D
+A_obs = A-K*C;
+B_obs = [B K];    % Observer has both u and Y as inputs
+C_obs = eye(2);   % -- QUESTION - what does this mean?  All states observable?
+D_obs = D;
 observer_system = ss(A_obs, B_obs, C_obs, D_obs);
 
 % Simulate results for observer system
 % Give both u and Y as inputs to observer
 t=0:0.05:10;              % times to simulate, start:step:stop
-observer_input = [U;Y'(1,:)];                 % input to observer if system is uncontrolled is U and Y' (first row, all columns)
-observer_input_controlled = [-G*Y';Y'(1,:)];  % input to observer is controlled is U=-G*Y' and Y' (first row, all columns)
+observer_input = [U;Y'];  % input to observer if system is uncontrolled is U and Y' -- QUESTION why is it not first row all columns of Y'?
+observer_input_controlled = [-G*Y';Y'];  % input to observer is controlled is U=-G*Y' and Y'
 initial_theta_hat = pi/3; % initial theta state for observer
 initial_omega_hat = 0.2;  % initial omega state for observer
 initial_conditions = [initial_theta_hat initial_omega_hat];
-[Y_hat,T,X_hat] = lsim(observer_system,observer_input,t,initial_conditions);  % doesn't plot when output arguments are desired
+[Y_hat,T,X_hat] = lsim(observer_system,observer_input',t,initial_conditions);  % doesn't plot when output arguments are desired
 
 % Plot observer error
 % Difference between actual state X and estimated state X_hat
-figure();
-plot(t,X-Xhat);
+##figure();
+##plot(t,X);
+##figure();
+##plot(t,X_hat);
+##figure();
+##plot(t,X-X_hat);
 
 
 
@@ -156,29 +177,40 @@ plot(t,X-Xhat);
 % Create one big, larger system, where its state includes both the controlled
 % feedback system's states and the observers states
 % so X for this combined system would be [theta, omega, theta_hat, omega_hat]
-A_combined = [A 0; K*C A-K*C]
-B_combined = [B B]
-C_combined = C
-D_combined = D
+A_combined = [A zeros(2); K*C A-K*C];  % 4x4
+B_combined = [B; B];   % 4x1
+C_combined = eye(4);   % 4x4  -- QUESTION - what does this mean?  All states observable?
+D_combined = D;
 combined_system = ss(A_combined, B_combined, C_combined, D_combined);
 
 % Simulate results for combined system
 % Give both u and Y as inputs to observer
 t=0:0.05:10;              % times to simulate, start:step:stop
-combined_input = [U;Y'(1,:)];                 % input to combined system if system is uncontrolled is U and Y' (first row, all columns)
-combined_input_controlled = [-G*Y';Y'(1,:)];  % input to combined system is controlled is U=-G*Y' and Y' (first row, all columns)
+combined_input = [U];     % input to combined system if system is uncontrolled is U
+combined_input_controlled = [-G*Y'];  % QUESTION --> input to combined system is controlled is U=-G*Y'
 initial_theta = pi/3;     % initial theta for feedback system/actual system
 initial_omega = 0.2;      % initial omega for feedback system/actual system
 initial_theta_hat = pi/3; % initial theta state for observer
 initial_omega_hat = 0.2;  % initial omega state for observer
-initial_conditions = [initial_theta initial_omega initial_theta_hat initial_omega_hat];
-figure();
-lsim(combined_system,combined_input,t,initial_conditions);
-[Y_combined,T,X_combined] = lsim(combined_system,combined_input,t,initial_conditions);  % doesn't plot when output arguments are desired
+initial_conditions = [initial_theta; initial_omega; initial_theta_hat; initial_omega_hat];  % 4x1
+[Y_combined,T,X_combined] = lsim(combined_system,combined_input',t,initial_conditions);  % doesn't plot when output arguments are desired
 
 % Plot observer error
 % Difference between actual state X and estimated state X_hat
-X_substate = X_combined(1:2,:);     % Portion of combined X states that is just the X states -- (first two rows)
-X_hat_substate = X_combined(3:4,:); % Portion of combined X states that is just the X hat states -- (second two rows)
+X_substate = X_combined'(1:2,:);      % Portion of combined X states that is just the X states -- (first two rows)
+X_hat_substate = X_combined'(3:4,:);  % Portion of combined X states that is just the X hat states -- (second two rows)
+
+figure();
+plot(t,X);
+figure();
+plot(t,X_substate);
+
+figure();
+plot(t,X_hat);
+figure();
+plot(t,X_hat_substate);
+
+figure();
+plot(t,X-X_hat);
 figure();
 plot(t,X_substate-X_hat_substate);

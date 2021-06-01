@@ -3,7 +3,7 @@
 % Author: Caleb Nelson
 % Revision: 0.5
 % Revision Info: System model with feedback and full order observer
-% Last Edit: 5/28/2021
+% Last Edit: 5/31/2021
 % 
 % Description
 %   This script is used to model and control a hover arm
@@ -73,8 +73,18 @@ A = [0 1; 0 -b];
 B = [0; l_rod_to_pivot/j_system];
 % for C matrix: num rows = num outputs (and number of measurements being taken simultaneously) and num columns = num states
 C = eye(2);         % 2x2 identity matrix -- assumes all states are being measured and reported as output y
-%C = [1 0];    % just theta is being measured and reported as an ouput y
+%C = [1 0; 0 0];    % just theta is being measured and reported as an ouput y
 D = [0];
+uncontrolled_sys = ss(A,B,C,D);
+% Simulate results for uncontrolled system
+t=0:0.05:10;              % times to simulate, start:step:stop
+U = zeros(size(t));       % input, discrete values for each time
+initial_angle = pi/3;     % initial angle
+initial_omega = 0.2;      % initial theta dot or omega or angular velocity (all equivalent)
+[Y,T,X] = lsim(uncontrolled_sys,U,t,[initial_angle;initial_omega]);  % doesn't plot when output arguments are desired
+% Check eigenvectors and eigenvalues
+##disp('The eigenvectors and eigenvalues of A for the uncontrolled system are:')
+##[eigenvectors, eigenvalues] = eig(uncontrolled_sys.a)
 
 %% DEVELOP STATE SPACE MODEL FOR CONTROLLED SYSTEM WITH FEEDBACK
 % X for this system is [theta, omega]
@@ -90,19 +100,17 @@ eig(A-B*G)
 % Create Controlled System (system with feedback and control -- observer not included in this state space model)
 % Reminder: X for this system is [theta, omega]
 A_con = A-B*G;
-B_con = [0; 0];
-C_con = [1 0; 0 0];  % -- QUESTION - Does this do what I want?-->  Saying we can only measure theta, theta is the only output, all the theta dot (omega) outputs will be 0 in Y
+B_con = [0; 0];     % No more small signal input for the controlled system, the input is now -B*G
+C_con = [1 0; 0 0]; % -- QUESTION - Does this do what I want?-->  Saying we can only measure theta, theta is the only output, all the theta dot (omega) outputs will be 0 in Y
 D_con = 0;
 controlled_sys = ss(A_con,B_con,C_con,D_con);
-
 % Simulate results for controlled system
 t=0:0.05:10;              % times to simulate, start:step:stop
 U = zeros(size(t));       % input, discrete values for each time
 initial_angle = pi/3;     % initial angle
 initial_omega = 0.2;      % initial theta dot or omega or angular velocity (all equivalent)
-[Y,T,X] = lsim(controlled_sys,U,t,[initial_angle;initial_omega]);  % doesn't plot when output arguments are desired
-
-##% Check eigenvectors and eigenvalues
+[Y_con,T,X_con] = lsim(controlled_sys,U,t,[initial_angle;initial_omega]);  % doesn't plot when output arguments are desired
+% Check eigenvectors and eigenvalues
 ##disp('The eigenvectors and eigenvalues of A for the controlled system are:')
 ##[eigenvectors, eigenvalues] = eig(controlled_sys.a)
 
@@ -116,31 +124,37 @@ initial_omega = 0.2;      % initial theta dot or omega or angular velocity (all 
 % find gain matrix K for the observer so that poles are in the left hand plane
 % Note the use of A and C transpose, they are transposed because the system has K*C instead of C*K
 % See written documentation for more info on that.
-##########CHECK BELOW -- Also check X transpose stuff, x and x_substate should match
+
 % Using manual pole placement:
-obs_poles = [-500, -600];
+obs_poles = [-10, -11];
+disp("Manual observer poles:")
 K = place(A',C',obs_poles)
 
 % Using LQR pole placement:
-Q = [100 0; 0 101];
-R = [0.01 0; 0 0.01];
-K = lqr(A',C',Q,R)
+Q = [10 0; 0 10];         % Is this synonymous with Vd?
+R = [0.01 0; 0 0.01];     % Is this synonymous with Vn?
+disp("LQR observer poles:")
+K = (lqr(A',C',Q,R))'
 
-% Using Kalman Filer pole placement:
+% Using Kalman Filter pole placement:
 Q = [10 0; 0 10];
 R = [0.01 0; 0 0.01];
-#[kf,L,~,Mx,Z] = kalman(system,Q,R);
+sys = ss(A,[B B],C,D);  % Plant dynamics --- QUESTION -- B has to be a 2x2 for kalman function??? is that right? if so why?
+[kalman_filter_sys,K,Xf] = kalman(sys,Q,R);
+disp("Kalman observer poles:")
+K
 
-%  Build Kalman filter
-%  Augment system with disturbances and noise
+% Using LQE pole placement to build Kalman Filter:
+% Augment system with disturbances and noise
 Vd = .1*eye(2);   % disturbance covariance
-Vn = 1;           % noise covariance
-#[L,P,E] = lqe(A,Vd,C,Vd,Vn);  % design Kalman filter
-#Kf = (lqr(A',C',Vd,Vn))';     % alternatively, possible to design using "LQR" code
-#sysKF = ss(A-L*C,[B L],eye(2),0*[B L]);  % Kalman filter estimator
+Vn = 1*eye(2);    % noise covariance
+[K,P,E] = lqe(A,Vd,C,Vd,Vn);  % design Kalman filter observer/estimator
+disp("LQE kalman observer poles:")
+K
+kalman_filter_observer_eigs = E
 
 % Verify poles/eigenvalues are where we want them with the controller implemented -- negative poles are stable since they are in the left hand plane
-disp('The poles of the observer are A-K*C which are:')
+disp('The poles of the observer are determined by A-K*C and are:')
 eig(A-K*C)
 
 
@@ -149,8 +163,8 @@ eig(A-K*C)
 A_obs = A-K*C;
 B_obs = [B K];    % Observer has both u and Y as inputs
 C_obs = eye(2);   % -- QUESTION - what does this mean?  All states observable?
-D_obs = D;
-observer_system = ss(A_obs, B_obs, C_obs, D_obs);
+D_obs = 0*[B K];
+observer_sys = ss(A_obs, B_obs, C_obs, D_obs);
 
 % Simulate results for observer system
 % Give both u and Y as inputs to observer
@@ -160,14 +174,10 @@ observer_input_controlled = [-G*Y';Y'];  % input to observer is controlled is U=
 initial_theta_hat = pi/3; % initial theta state for observer
 initial_omega_hat = 0.2;  % initial omega state for observer
 initial_conditions = [initial_theta_hat initial_omega_hat];
-[Y_hat,T,X_hat] = lsim(observer_system,observer_input',t,initial_conditions);  % doesn't plot when output arguments are desired
+[Y_hat,T,X_hat] = lsim(observer_sys,observer_input',t,initial_conditions);  % doesn't plot when output arguments are desired
 
 % Plot observer error
 % Difference between actual state X and estimated state X_hat
-##figure();
-##plot(t,X);
-##figure();
-##plot(t,X_hat);
 ##figure();
 ##plot(t,X-X_hat);
 
@@ -187,7 +197,7 @@ combined_system = ss(A_combined, B_combined, C_combined, D_combined);
 % Give both u and Y as inputs to observer
 t=0:0.05:10;              % times to simulate, start:step:stop
 combined_input = [U];     % input to combined system if system is uncontrolled is U
-combined_input_controlled = [-G*Y'];  % QUESTION --> input to combined system if controlled is U=-G*Y'
+combined_input_controlled = [-G*Y'];  % QUESTION --> input to combined system is controlled is U=-G*Y'
 initial_theta = pi/3;     % initial theta for feedback system/actual system
 initial_omega = 0.2;      % initial omega for feedback system/actual system
 initial_theta_hat = pi/3; % initial theta state for observer
@@ -200,17 +210,20 @@ initial_conditions = [initial_theta; initial_omega; initial_theta_hat; initial_o
 X_substate = X_combined'(1:2,:);      % Portion of combined X states that is just the X states -- (first two rows)
 X_hat_substate = X_combined'(3:4,:);  % Portion of combined X states that is just the X hat states -- (second two rows)
 
-
+% Plot X as determined using the the two different methods, these should be the same
 figure();
 plot(t,X);
 figure();
 plot(t,X_substate);
 
+% Plot X_hat as determined using the the two different methods, these should be the same
 figure();
 plot(t,X_hat);
 figure();
 plot(t,X_hat_substate);
 
+% Plot observer error using the two different methods, these should be the same
+% The error is the difference between actual state X and estimated state X_hat, should converge to 0
 figure();
 plot(t,X-X_hat);
 figure();

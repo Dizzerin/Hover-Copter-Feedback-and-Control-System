@@ -136,8 +136,8 @@ K = (lqr(A',C',Q,R))'
 Q = [10 0; 0 10];
 ##R = [0.1 0; 0 0.1];   % R is 2x2 if measuring both states in X
 R = 0.1;              % R is 1x1 if measuring only one state in X
-B_u = [0; 0];   % Matrix defining how much the u input affects each state in x
-B_w = [0; 0];   % Matrix defining how much w noise input affects each state in x
+B_u = B;   % Matrix defining how much the u input affects each state in x
+B_w = B;   % Matrix defining how much w noise input affects each state in x
 Ts = -1;      % Mark it as discrete with no specific sample time
 sys = ss(A,[B_u B_w],C,D,Ts,'InputName',{'u' 'w'},'OutputName','y');  % Plant dynamics and additive input noise w - B has to be a 2x2 for kalman function because there are two inputs, U and noise inputs
 [kalman_filter_sys,K,Xf] = kalman(sys,Q,R);   % Creates a full system
@@ -155,12 +155,12 @@ K
 kalman_filter_observer_eigs = E
 
 % Using manual pole placement:
-obs_poles = [-10, -11];
+obs_poles = [-10, -9];
 disp("K gain matrix with manually placed kalman observer poles:")
 K = (place(A',C',obs_poles))'
 
 
-% Verify poles/eigenvalues are where we want them with the controller implemented -- negative poles are stable since they are in the left hand plane
+% Verify poles/eigenvalues are where we want them -- negative poles are stable since they are in the left hand plane
 disp('The poles of the observer are determined by A-K*C and are:')
 eig(A-K*C)
 
@@ -183,19 +183,14 @@ initial_omega_hat = 0.2;  % initial omega state for observer
 initial_conditions = [initial_theta_hat initial_omega_hat];
 [Y_hat,T,X_hat] = lsim(observer_sys,observer_input',t,initial_conditions);  % doesn't plot when output arguments are desired
 
-% Plot observer error
-% Difference between actual state X and estimated state X_hat
-##figure();
-##plot(t,X-X_hat);
-
 
 
 %% SECOND METHOD -- COMBINE THE CONTROLLED FEEDBACK SYSTEM WITH THE OBSERVER SYSTEM
 % Create one big, larger system, where its state includes both the controlled
 % feedback system's states and the observers states
 % so X for this combined system would be [theta, omega, theta_hat, omega_hat]
+B_combined = [B; B];   % 4x1 -- same B for the estimated states as the actual states
 A_combined = [A zeros(2); K*C A-K*C];  % 4x4
-B_combined = [B; B];   % 4x1
 C_combined = eye(4);   % 4x4 -- All states observable
 D_combined = D;
 combined_system = ss(A_combined, B_combined, C_combined, D_combined);
@@ -217,17 +212,13 @@ initial_conditions = [initial_theta; initial_omega; initial_theta_hat; initial_o
 X_substate = X_combined'(1:2,:);      % Portion of combined X states that is just the X states -- (first two rows)
 X_hat_substate = X_combined'(3:4,:);  % Portion of combined X states that is just the X hat states -- (second two rows)
 
-% Plot X as determined using the the two different methods, these should be the same
+% Plot the difference between the first and second methods of approxiamtion for X
 figure();
-plot(t,X);
-figure();
-plot(t,X_substate);
+plot(t,X-X_substate');   % Should be 0
 
-% Plot X_hat as determined using the the two different methods, these should be the same
+% Plot the difference between the first and second methods of approxiamtion for X_hat
 figure();
-plot(t,X_hat);
-figure();
-plot(t,X_hat_substate);
+plot(t,X_hat-X_hat_substate');   % Should be 0
 
 % Plot observer error using the two different methods, these should be the same
 % The error is the difference between actual state X and estimated state X_hat, should converge to 0
@@ -235,3 +226,6 @@ figure();
 plot(t,X-X_hat);
 figure();
 plot(t,X_substate-X_hat_substate);
+
+
+% Something is wrong with X_hat_substate

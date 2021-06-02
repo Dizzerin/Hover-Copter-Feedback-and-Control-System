@@ -1,14 +1,14 @@
 /* Info
  * Author: Caleb Nelson
- * Revision: 0.8
- * Last Edit: 5/25/2021
+ * Revision: 0.9
+ * Last Edit: 6/2/2021
  * 
  * Description
  *  This program is used to control a hover copter arm for feedback and control systems course offered at Walla Walla University
  *  It currently implements a basic state feedback control algorithm with "hand placed" pole locations, where we arbitrarily chose
  *  pole locations in the left half of the complex plane and used Matlab/Octave to find the necessary controller gain parameters to 
  *  force the system to have the poles we chose.  It also includes some pole locations which were placed using LQR.
- *  This version (0.8) now also includes a full order observer to estimate our full state based only off measuring the angle theta.
+ *  This version now also includes a full order observer to estimate our full state based only off measuring the angle theta.
  *  There are currently two different state approximations that can be used (choice is dependant on the "Observer" On/Off toggle on the dashboard)
  *  If the observer toggle is set to on, the observer's estimated state will be used, if it is set to off, the "manually" estimated state estimation
  *  will be used.  The "manual" state estimation uses the measured theta, and an approximation for thetaDot as (currentTheta-lastTheta)/deltaT
@@ -59,8 +59,7 @@ float G[2] = {4.0, 0.95};        // Our 3rd manual placed poles
 // float G[2] = {0.3162, 0.1205};   // Our first LQR placed poles
 
 // Gain Matrix Parameters for the observer -- to place the poles/eigenvalues of the observer at desired location -- makes error go to 0 and xhat converge to x
-// float K[2] = {0.6998, 0.7248};      // LQE/LRQ placed poles - poles at -10, -11
-float K[2] = {7.6627, 0.5145};      // LQE/LRQ placed poles - poles at -30, -31
+float K[2] = {20.59, 101.558};      // Manually placed poles - poles at -10, -11
 
 // 6302view Initialization
 #define STEP_TIME 5000              // Time between loops/steps in microseconds
@@ -131,8 +130,8 @@ void setup() {
   comManager.addSlider(&PWMDutyCycleLarge, "PWM Duty Cycle", 0, MAX_DUTY_CYCLE, 1);   // Slider to control PWM/Duty Cycle
   comManager.addSlider(&G[0], "G1", 0, 4, 0.05);
   comManager.addSlider(&G[1], "G2", 0, 3, 0.05);
-  comManager.addSlider(&K[0], "K1", 0, 4, 0.05);
-  comManager.addSlider(&K[1], "K2", 0, 4, 0.05);
+  comManager.addSlider(&K[0], "K1", 0, 105, 1);
+  comManager.addSlider(&K[1], "K2", 0, 105, 1);
     
   // Connect to 6302view via serial communication
   comManager.connect(&Serial, 115200);
@@ -189,8 +188,8 @@ void loop() {
   //   Also set which state estimation method will be used (manual estimation or observer estimation)
   if (observerOn){    
     // Update observer values
-    currentXHat[0] = ((A[0][0]-K[0]-B[0]*G[0])*deltaT+1)*lastXHat[0]+((A[0][1]-B[0]*G[1]*deltaT)*lastXHat[1])+K[0]*deltaT*measuredTheta;
-    currentXHat[1] = ((A[1][0]-K[1]-B[1]*G[0])*deltaT)*lastXHat[0]+((A[1][1]-B[1]*G[1]*deltaT+1)*lastXHat[1])+K[1]*deltaT*measuredTheta;
+    currentXHat[0] = ((A[0][0]-K[0]-B[0]*G[0])*deltaT+1)*lastXHat[0]+((A[0][1]-B[0]*G[1])*deltaT)*lastXHat[1]+K[0]*deltaT*measuredTheta;
+    currentXHat[1] = ((A[1][0]-K[1]-B[1]*G[0])*deltaT)*lastXHat[0]+((A[1][1]-B[1]*G[1])*deltaT+1)*lastXHat[1]+K[1]*deltaT*measuredTheta;
     
     // Set the obsever estimated state as the one to be used
     usedX[0] = currentXHat[0];

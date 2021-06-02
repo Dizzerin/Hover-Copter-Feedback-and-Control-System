@@ -130,7 +130,7 @@ Q = [10 0; 0 10];     % Minimize equation X'*Q*X - therefore Q could be thought 
 ##R = [0.1 0; 0 0.1];   % R is 2x2 if measuring both states in X  -- minimize equation Y'*R*Y -- Therefore R could be thought of as Vn (output noise) in this context
 R = 0.1;              % R is 1x1 if measuring only one state in X
 disp("K gain matrix with LQR placed kalman observer poles:")
-K = (lqr(A',C',Q,R))'
+K = (lqr(A',C',Q,R))'   % Counts as kalman filter
 
 % Using Kalman Filter pole placement:
 Q = [10 0; 0 10];
@@ -148,14 +148,14 @@ K
 % Augment system with disturbances and noise
 Vd = [0.1 0; 0 0.1];  % disturbance covariance
 ##Vn = [1 0; 0 1];    % noise covariance -- 2x2 if measuring both states in X
-Vn = 1;               % noise covariance -- 1x1 if measuring only 1 state in X
+Vn = 0.1;               % noise covariance -- 1x1 if measuring only 1 state in X
 [K,P,E] = lqe(A,Vd,C,Vd,Vn);  % design Kalman filter observer/estimator
 disp("K gain matrix with LQE placed kalman observer poles:")
 K
 kalman_filter_observer_eigs = E
 
 % Using manual pole placement:
-obs_poles = [-10, -9];
+obs_poles = [-10, -11];
 disp("K gain matrix with manually placed kalman observer poles:")
 K = (place(A',C',obs_poles))'
 

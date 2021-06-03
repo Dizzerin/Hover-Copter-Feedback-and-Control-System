@@ -1,17 +1,31 @@
 /* Info
  * Author: Caleb Nelson
- * Revision: 0.9
+ * Revision: 1.0
  * Last Edit: 6/2/2021
  * 
  * Description
- *  This program is used to control a hover copter arm for feedback and control systems course offered at Walla Walla University
- *  It currently implements a basic state feedback control algorithm with "hand placed" pole locations, where we arbitrarily chose
- *  pole locations in the left half of the complex plane and used Matlab/Octave to find the necessary controller gain parameters to 
- *  force the system to have the poles we chose.  It also includes some pole locations which were placed using LQR.
- *  This version now also includes a full order observer to estimate our full state based only off measuring the angle theta.
+ *  This program is used to control a hover copter arm for feedback and control systems course offered at Walla Walla University.
+ *  This software relies on the 6302view (Six302) library for the GUI control panel.
+ *  
+ *  This software currently implements a state feedback control algorithm with various gain paramters to choose from.
+ *  Currently in the code, there are gain parameters for manually placed poles and poles determined using LQR, you may uncomment the lines for whichever 
+ *  gain parameters you would like to use.  Or if you would prefer, you can set the gains manually using the sliders on the GUI control panel.
+ *  The gain parameters in the code were chosen using MATLAB/Octave to place the poles of the system in the left half of the complex plane so the
+ *  system would be stable.
+ *  
+ *  This software also includes a full order observer, the use of which can be toggled using a toggle switch on the GUI control panel.  
+ *  The full order observer is used to estimate the full system state (all state variables) based only off measuring the angle theta.
  *  There are currently two different state approximations that can be used (choice is dependant on the "Observer" On/Off toggle on the dashboard)
  *  If the observer toggle is set to on, the observer's estimated state will be used, if it is set to off, the "manually" estimated state estimation
  *  will be used.  The "manual" state estimation uses the measured theta, and an approximation for thetaDot as (currentTheta-lastTheta)/deltaT
+ *  
+ *  The full order observer mentioned above can also be a kalman filter if you choose to use the Kalman gain parameters for it: simply uncomment them in the code.
+ *  
+ *  Additionally, this software includes a reduced order observer which estimates only the unmeasured state variables instead of all the state variables.
+ *  This reduced order observer can also be toggled using a toggle switch on the GUI control panel.  Note that if both the full order observer and reduced order
+ *  observer are on simultaneously the reduced order observer will take precedence.  Additionally, it may be useful to note that the reduced order observer stores
+ *  its values in the same arrays as the full order observer, this is fine because one takes precedence over the other and they will not be used simultaneously and
+ *  will never overwrite each other.
  *  
  * Note: If you get the compile error "ledcSetup was not declared in this scope" that indicates the ESP32 board is not selected.
  */
@@ -49,7 +63,7 @@ float currentEstimatedX[2] = {0.0, 0.0};  // Current estimated full state x -- t
 float lastXHat[2] = {0.0, 0.0};           // Last observer estimated state x -- xHat is the estimated state matrix from the observer
 float currentXHat[2] = {0.0, 0.0};        // Current observer estimated state x -- xHat is the estimated state matrix from the observer
 float usedX[2] = {0.0, 0.0};              // State that will be used for calculations, this allows us to switch between the two methods of full state estimation above
-float estimatedXDiff[2] = {0.0, 0.0};     // Difference between measured state x and observer estimated state xHat.  Claculted as currentEstimatedX-currentXHat
+float estimatedXDiff[2] = {0.0, 0.0};     // Difference between measured state x and observer estimated state xHat.  Calculted as currentEstimatedX-currentXHat
 
 // Control Gain Matrix Parameters for State Feeback Controller -- used to place the poles/eigenvalues at desired location -- obtained using Matlab or Octave
 // float G[2] = {3.8093, 0.5944};   // Konrads manual placed poles
@@ -60,6 +74,13 @@ float G[2] = {4.0, 0.95};        // Our 3rd manual placed poles
 
 // Gain Matrix Parameters for the observer -- to place the poles/eigenvalues of the observer at desired location -- makes error go to 0 and xhat converge to x
 float K[2] = {20.59, 101.558};      // Manually placed poles - poles at -10, -11
+
+// Values for reduced order observer
+float L = 39.590;    // Gain "matrix" parameters for the reduced order observer -- poles at -40
+//float L = 9.5900;   // Gain "matrix" parameters for the reduced order observer -- poles at -10
+float H = 117.77;
+float F = -0.41 - L;
+float GDoubleBar = 0;
 
 // 6302view Initialization
 #define STEP_TIME 5000              // Time between loops/steps in microseconds
@@ -96,7 +117,8 @@ float motorCurrent = 0.0;                     // Current being delivered to the 
 float deltaT = 0.005;                 // Time span between samples in seconds -- used for calculating estimated time derivatives -- 6302's communication manager handles this and ensures this delay between loops/steps
 bool controlOn = false;               // Toggle for enabling feedback control algorithms
 bool powerOn = false;                 // Toggle to control power to the motor
-bool observerOn = false;              // Toggle to control observer being used
+bool fullObserverOn = false;          // Toggle to control full order observer being used
+bool reducedObserverOn = false;       // Toggle to control reduced order observer being used
 bool setZeroPoint = false;            // Button to set the current hover arm position as the 0 point (theta=0 should correspond to horizontal)
 
 
@@ -107,7 +129,8 @@ void setup() {
   // Toggles
   comManager.addToggle(&controlOn, "Feedback Control");
   comManager.addToggle(&powerOn, "Power");
-  comManager.addToggle(&observerOn, "Observer");
+  comManager.addToggle(&fullObserverOn, "Full Order Observer");
+  comManager.addToggle(&reducedObserverOn, "Reduced Order Observer");
   // Numbers
 // comManager.addNumber(&voltageDrop, "R3 Voltage Drop (V)");                     // Max of about 1 volt
 // comManager.addNumber(&motorCurrent, "Motor Current (Amps)");                   // Max of about 2 amps
@@ -132,6 +155,7 @@ void setup() {
   comManager.addSlider(&G[1], "G2", 0, 3, 0.05);
   comManager.addSlider(&K[0], "K1", 0, 105, 1);
   comManager.addSlider(&K[1], "K2", 0, 105, 1);
+  comManager.addSlider(&L, "L", 0, 60, 1);
     
   // Connect to 6302view via serial communication
   comManager.connect(&Serial, 115200);
@@ -185,8 +209,23 @@ void loop() {
   currentEstimatedX[1] = (currentEstimatedX[0]-lastEstimatedX[0])/deltaT;  // approximate thetaDot in radians/sec
   
   // Update observer estimated state
-  //   Also set which state estimation method will be used (manual estimation or observer estimation)
-  if (observerOn){    
+  //    Also set which state estimation method will be used (manual estimation or observer estimation)
+  //    NOTE: the reduced order observer takes precedence
+  if (reducedObserverOn){    
+    // Update observer values
+    // NOTE: The reduced order observer uses all the available measurements and only estimates the unknowns, so we only need to estimate the second value, not the first
+    currentXHat[0] = measuredTheta;
+    currentXHat[1] = (deltaT*F-deltaT*H*G[1]+1)*lastXHat[1]-(deltaT*H*G[0]-GDoubleBar+L)*lastXHat[0]+L*measuredTheta;   // Uses C1=1 and lastXHat[0]=last measured theta and currentXHat[0]=measuredTheta
+    
+    // Set the obsever estimated state as the one to be used
+    usedX[0] = measuredTheta;   // Reduced order observer uses all the available measurements
+    usedX[1] = currentXHat[1];  // Reduced order observer only estimates the unknowns
+
+    // Update difference between the manually estimated state and the observer estimated state
+    estimatedXDiff[0] = currentEstimatedX[0] - currentXHat[0];
+    estimatedXDiff[1] = currentEstimatedX[1] - currentXHat[1];
+  }
+  else if (fullObserverOn){
     // Update observer values
     currentXHat[0] = ((A[0][0]-K[0]-B[0]*G[0])*deltaT+1)*lastXHat[0]+((A[0][1]-B[0]*G[1])*deltaT)*lastXHat[1]+K[0]*deltaT*measuredTheta;
     currentXHat[1] = ((A[1][0]-K[1]-B[1]*G[0])*deltaT)*lastXHat[0]+((A[1][1]-B[1]*G[1])*deltaT+1)*lastXHat[1]+K[1]*deltaT*measuredTheta;
@@ -194,16 +233,16 @@ void loop() {
     // Set the obsever estimated state as the one to be used
     usedX[0] = currentXHat[0];
     usedX[1] = currentXHat[1];
+
+    // Update difference between the manually estimated state and the observer estimated state
+    estimatedXDiff[0] = currentEstimatedX[0] - currentXHat[0];
+    estimatedXDiff[1] = currentEstimatedX[1] - currentXHat[1];
   }
   else {
     // Set the manually estimated state as the one to be used
     usedX[0] = currentEstimatedX[0];
     usedX[1] = currentEstimatedX[1];
   }
-  
-  // Update difference between the manually estimated state and the observer estimated state
-  estimatedXDiff[0] = currentEstimatedX[0] - currentXHat[0];
-  estimatedXDiff[1] = currentEstimatedX[1] - currentXHat[1];
 
   // Implement control by updating small signal portion of PWM duty cycle
   if (controlOn && PWMDutyCycleLarge > 0) {

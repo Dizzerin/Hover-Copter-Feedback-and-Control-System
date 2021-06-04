@@ -3,7 +3,7 @@
 % Author: Caleb Nelson
 % Revision: 0.5
 % Revision Info: System model with feedback and full order observer
-% Last Edit: 5/31/2021
+% Last Edit: 6/3/2021
 % 
 % Description
 %   This script is used to model and control a hover arm
@@ -107,9 +107,9 @@ controlled_sys = ss(A_con,B_con,C_con,D_con);
 % Simulate results for controlled system
 t=0:0.05:10;              % times to simulate, start:step:stop
 U = zeros(size(t));       % input, discrete values for each time
-initial_angle = pi/3;     % initial angle
+initial_theta = pi/3;     % initial theta
 initial_omega = 0.2;      % initial theta dot or omega or angular velocity (all equivalent)
-[Y_con,T,X_con] = lsim(controlled_sys,U,t,[initial_angle;initial_omega]);  % doesn't plot when output arguments are desired
+[Y_con,T,X_con] = lsim(controlled_sys,U,t,[initial_theta;initial_omega]);  % doesn't plot when output arguments are desired
 % Check eigenvectors and eigenvalues
 ##disp('The eigenvectors and eigenvalues of A for the controlled system are:')
 ##[eigenvectors, eigenvalues] = eig(controlled_sys.a)
@@ -126,11 +126,15 @@ initial_omega = 0.2;      % initial theta dot or omega or angular velocity (all 
 % See written documentation for more info on that.
 
 % Using LQR pole placement:
+%   Let Nd be the disturbance noise (random), and Nn be the measurement noise (random)
+%   Make Q bigger if you want it to react well to disturbance noise.
+%   Make R bigger if you want to minimize the effect of output noise.
+%   Ideally you would use Q = E[Nd, Nd] and R = E[Nn'Nn]
 Q = [10 0; 0 10];     % Minimize equation X'*Q*X - therefore Q could be thought of as Vd (input disturbances) in this context -- bigger Q means X stays smaller make this big so mistakes in this variable don't matter too much
 ##R = [0.1 0; 0 0.1];   % R is 2x2 if measuring both states in X  -- minimize equation Y'*R*Y -- Therefore R could be thought of as Vn (output noise) in this context
 R = 0.1;              % R is 1x1 if measuring only one state in X
 disp("K gain matrix with LQR placed kalman observer poles:")
-K = (lqr(A',C',Q,R))'   % Counts as kalman filter
+K = (lqr(A',C',Q,R))'
 
 % Using Kalman Filter pole placement:
 Q = [10 0; 0 10];
@@ -146,16 +150,16 @@ K
 
 % Using LQE pole placement to build Kalman Filter:
 % Augment system with disturbances and noise
-Vd = [0.1 0; 0 0.1];  % disturbance covariance
+Vd = [0.1 0; 0 0.1];  % disturbance covariance 
 ##Vn = [1 0; 0 1];    % noise covariance -- 2x2 if measuring both states in X
-Vn = 0.1;               % noise covariance -- 1x1 if measuring only 1 state in X
+Vn = 1;               % noise covariance -- 1x1 if measuring only 1 state in X
 [K,P,E] = lqe(A,Vd,C,Vd,Vn);  % design Kalman filter observer/estimator
 disp("K gain matrix with LQE placed kalman observer poles:")
 K
 kalman_filter_observer_eigs = E
 
 % Using manual pole placement:
-obs_poles = [-10, -11];
+obs_poles = [-10, -9];
 disp("K gain matrix with manually placed kalman observer poles:")
 K = (place(A',C',obs_poles))'
 
@@ -178,8 +182,8 @@ observer_sys = ss(A_obs, B_obs, C_obs, D_obs);
 t=0:0.05:10;              % times to simulate, start:step:stop
 observer_input = [U;Y'];  % input to observer if system is uncontrolled is U and Y'
 observer_input_controlled = [-G*X';Y'];  % input to observer if controlled is U=-G*X' and Y'
-initial_theta_hat = pi/3; % initial theta state for observer
-initial_omega_hat = 0.2;  % initial omega state for observer
+initial_theta_hat = 0; % initial theta state for observer  (Changed this to zero for the observer system)
+initial_omega_hat = 0;  % initial omega state for observer (Changed this to zero for the observer system)
 initial_conditions = [initial_theta_hat initial_omega_hat];
 [Y_hat,T,X_hat] = lsim(observer_sys,observer_input',t,initial_conditions);  % doesn't plot when output arguments are desired
 
@@ -188,22 +192,18 @@ initial_conditions = [initial_theta_hat initial_omega_hat];
 %% SECOND METHOD -- COMBINE THE CONTROLLED FEEDBACK SYSTEM WITH THE OBSERVER SYSTEM
 % Create one big, larger system, where its state includes both the controlled
 % feedback system's states and the observers states
-% so X for this combined system would be [theta, omega, theta_hat, omega_hat]
+% so X for this combined system would be [theta, omega, theta_hat, omega_hat]:
 B_combined = [B; B];   % 4x1 -- same B for the estimated states as the actual states
 A_combined = [A zeros(2); K*C A-K*C];  % 4x4
 C_combined = eye(4);   % 4x4 -- All states observable
-D_combined = D;
+D_combined = zeros(4,1);
 combined_system = ss(A_combined, B_combined, C_combined, D_combined);
 
 % Simulate results for combined system
 % Give both u and Y as inputs to observer
 t=0:0.05:10;              % times to simulate, start:step:stop
-combined_input = [U];     % input to combined system if system is uncontrolled is U
+combined_input = U;     % input to combined system if system is uncontrolled is U
 combined_input_controlled = [-G*X'];  % input to combined system if controlled is U=-G*X'
-initial_theta = pi/3;     % initial theta for feedback system/actual system
-initial_omega = 0.2;      % initial omega for feedback system/actual system
-initial_theta_hat = pi/3; % initial theta state for observer
-initial_omega_hat = 0.2;  % initial omega state for observer
 initial_conditions = [initial_theta; initial_omega; initial_theta_hat; initial_omega_hat];  % 4x1
 [Y_combined,T,X_combined] = lsim(combined_system,combined_input',t,initial_conditions);  % doesn't plot when output arguments are desired
 
@@ -213,19 +213,30 @@ X_substate = X_combined'(1:2,:);      % Portion of combined X states that is jus
 X_hat_substate = X_combined'(3:4,:);  % Portion of combined X states that is just the X hat states -- (second two rows)
 
 % Plot the difference between the first and second methods of approxiamtion for X
-figure();
+figure(1);
 plot(t,X-X_substate');   % Should be 0
+title('X - X_{substate}')
 
 % Plot the difference between the first and second methods of approxiamtion for X_hat
-figure();
+figure(2);
 plot(t,X_hat-X_hat_substate');   % Should be 0
+title('X_{hat} - X_{hat_{substate}}')
 
 % Plot observer error using the two different methods, these should be the same
 % The error is the difference between actual state X and estimated state X_hat, should converge to 0
-figure();
+figure(3);
 plot(t,X-X_hat);
-figure();
+title('X-X_{hat}')
+figure(4);
 plot(t,X_substate-X_hat_substate);
+title('X_{substate} - X_{hat_{substate}}')
 
 
-% Something is wrong with X_hat_substate
+% Something may still be slightly wrong with X_hat_substate
+% I'm still not really happy with the agreement between the two simulation methods
+% but the thing that was messing us up the most in the previous version was that 
+% the initial conditions for x_hat and x were the same.  Ideally this would 
+% analytically give us zero always, but it doesn't.  The errors seem to be bigger 
+% with the combined system. It looks much better if you start the observer from 
+% zero initial conditions.  After all you have no idea what the initial state 
+% is, so you might as well pick zero.
